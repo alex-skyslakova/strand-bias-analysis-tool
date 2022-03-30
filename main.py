@@ -1,62 +1,18 @@
+import itertools
 import os
 import subprocess
 
-from Bio import SeqIO
 import math
+from shutil import which
 
-complements_dict = {'A': 'T',
+from Bio.SeqIO.FastaIO import SimpleFastaParser
+import pandas as pd
+from datetime import datetime
+
+COMPLEMENTS_DICT = {'A': 'T',
                     'C': 'G',
                     'G': 'C',
                     'T': 'A'}
-
-
-class KMerStatistics:
-    def __init__(self, k):
-        self.k = k
-        self.kmers = []
-        self.input_file = ""
-
-    def add_kmer(self, mer, forward_count, backward_count):
-        self.kmers.append(KMer(mer, forward_count, backward_count))
-
-    def get_sorted_kmers(self):
-        self.kmers.sort(key=lambda x: x.ratio, reverse=True)
-
-    '''def print_by_ratio(self):
-        self.get_sorted_kmers()
-        for i in self.kmers:
-            print("***")
-            print("kmer: " + i.forward + " (" + str(i.forward_count) + ")")
-            print("kmer: " + i.backward + " (" + str(i.backward_count) + ")")
-            print("ratio: " + str(i.ratio))
-
-    def print_by_ratio_csv(self):
-        if self.k <= 7:
-            self.get_sorted_kmers()
-            kmers_to_csv(self.k, self.kmers, self.input_file)
-
-        else:
-            percentage = round(len(self.kmers) * 0.02)
-            result = get_n_most_significant(self.kmers, percentage)
-            kmers_to_csv(self.k, result, self.input_file)'''
-
-
-class KMer:
-    def __init__(self, mer, forward_count, backward_count):
-        self.forward = mer
-        self.forward_count = forward_count
-        self.backward = get_reverse_complement(mer)
-        self.backward_count = backward_count
-        self.ratio = round(forward_count / backward_count if backward_count != 0 else math.nan, 3)
-
-
-def read_fasta(path, output_type='list'):
-    seq_list = [rec.seq for rec in SeqIO.parse(path, "fasta")]
-    seq_dict = {rec.seq: int(rec.id) for rec in SeqIO.parse(path, "fasta")}  # dictionary of pairs 'sequence: count'
-    if output_type == "list":
-        return seq_list
-    if output_type == "dict":
-        return seq_dict
 
 
 def get_reverse_complement(seq):
@@ -67,152 +23,75 @@ def get_reverse_complement(seq):
     """
     reverse_complement = ""
     for n in reversed(seq):
-        reverse_complement += complements_dict[n.capitalize()]
+        reverse_complement += COMPLEMENTS_DICT[n.capitalize()]
     return reverse_complement
 
 
 def is_tool(name):
     """Check whether `name` is on PATH and marked as executable."""
 
-    from shutil import which
-
     return which(name) is not None
 
 
-'''def get_kmer_ratios(path, k):
-    jellyfish_result_dict = read_fasta(path, output_type="dict")
-    stats = KMerStatistics(k)
-    kmers = list(jellyfish_result_dict.keys())
-    while kmers:
-
-        kmer = kmers.pop()
-        rev_complement = get_reverse_complement(kmer)
-        if kmer == rev_complement:
-            stats.add_kmer(kmer, jellyfish_result_dict[kmer] // 2, jellyfish_result_dict[kmer] // 2)
-        else:
-            stats.add_kmer(kmer, jellyfish_result_dict[kmer], jellyfish_result_dict[rev_complement])
-            kmers.remove(rev_complement)
-    return stats'''
-
-
-def run_jellyfish(input_file):
-    k = 11
+def run_jellyfish(input_file, k=7):
     calculate = "jellyfish count -m " + str(k) + " -s 500M " + input_file
     subprocess.run(calculate.split(" "), stdout=subprocess.PIPE)
     dump = "jellyfish dump mer_counts.jf"
     with open("output_" + str(k) + "_" + os.path.basename(input_file), "w") as outfile:
         subprocess.run(dump.split(" "), stdout=outfile)
-    #stats = get_kmer_ratios("output_" + str(k) + "_" + os.path.basename(input_file), k)
-    #stats.input_file = os.path.basename(input_file)
 
 
-def kmers_to_csv(k, kmers, output_file_name):
-    with open("_ordered_output_" + str(k) + "_" + os.path.basename(output_file_name.split(".")[0] + ".csv"),
-              'w') as output:
-        output.write("forward_kmer,forward_count,backward_kmer,backward_count,ratio\n")
-        for i in kmers:
-            string = i.forward + "," + str(i.forward_count) + "," + i.backward + "," + str(
-                i.backward_count) + "," + str(i.ratio) + "\n"
-            output.write(str(string))
-
-
-'''
-def get_n_most_significant(kmers, n):
-    best_n = []
-    worst_n = []
-    used_indexes_best = []
-    used_indexes_worst = []
-    for i in range(n):
-        current_worst = None
-        current_best = None
-        for j in range(len(kmers)):
-            if j in used_indexes_best or j in used_indexes_worst:
-                continue
-            kmer = kmers[j]
-            if  current_worst is None or kmer.ratio > current_worst.ratio:
-                current_worst = kmer
-                used_indexes_worst.append(j)
-                continue
-            if current_best is None or kmer.ratio < current_best.ratio:
-                current_best = kmer
-                used_indexes_best.append(j)
-                continue
-        best_n.append(current_best)
-        worst_n.append(current_worst)
-    best_n.reverse()
-    return worst_n + best_n
-
-input_file = "GRCh38_latest_genomic.fna"
-k = 9
-
-stats = get_kmer_ratios("output_" + str(k) + "_" + os.path.basename(input_file), k)
-print("Here")
-stats.input_file = input_file
-#stats.print_by_ratio()
-stats.print_by_ratio_csv()'''
-
-
-# //////////////////////////////////////////////////
-
-
-def run_jellyfish2(input_file, k=7):
-    calculate = "jellyfish count -m " + str(k) + " -s 500M " + input_file
-    subprocess.run(calculate.split(" "), stdout=subprocess.PIPE)
-    dump = "jellyfish dump mer_counts.jf"
-    with open("output_" + str(k) + "_" + os.path.basename(input_file), "w") as outfile:
-        subprocess.run(dump.split(" "), stdout=outfile)
-    #stats = get_kmer_ratios("output_" + str(k) + "_" + os.path.basename(input_file), k)
-    #stats.input_file = os.path.basename(input_file)
-
-
-from Bio.SeqIO.FastaIO import SimpleFastaParser
-import pandas as pd
-from datetime import datetime
-
-
-def jellyfish_to_DataFrame(path, k):
+def parse_fasta(path):
     seq = []
     seq_count = []
-    #print(path)
     with open(path) as fasta_file:
-        c= 0
+        c = 0
         for count, sequence in SimpleFastaParser(fasta_file):
-            #print(count, sequence)
+            # print(count, sequence)
+            if sequence == get_reverse_complement(sequence):
+                continue
             c += 1
             seq.append(sequence)
             seq_count.append(float(count))
-    #print(c)
+    return seq, seq_count
+
+
+def jellyfish_to_dataframe(path, k):
+    seq, seq_count = parse_fasta(path)
+
+    # create dataframe with k-mers and their counts
     jellyfish_data = pd.DataFrame(
         data={'seq': seq,
               'seq_count': seq_count},
         index=seq,
         columns=['seq', 'seq_count'])
 
+    # add column with reverse complements
     jellyfish_data['rev_complement'] = jellyfish_data.apply(lambda row: get_reverse_complement(row["seq"]),
-                                                            axis=1)  # add column with
+                                                            axis=1)
+    # split sequence set into forward and backward sequences (so that k-mer and its reverse complement
+    # are not together in group)
     fwd_kmers, bwd_kmers = get_kmers_to_remove(k)
+
+    # remove backward group from DataFrame, as it is already represented as reverse complement to some
+    # other k-mer in the DataFrame
     jellyfish_forward = jellyfish_data.drop(bwd_kmers, errors="ignore").set_index("rev_complement")
+
+    # join forward DF with original one on index (equal to forward sequence) in order to connect info about
+    # forward and backward datasets
     jellyfish_data = jellyfish_data.reset_index().join(jellyfish_forward, on="index", rsuffix="_", lsuffix="").drop(
         columns=["seq_", "index"], axis=1).dropna()
     jellyfish_data.rename(columns={"seq_count_": "rev_complement_count"}, inplace=True)
 
-    print(jellyfish_data.head())
-
-
-    # jellyfish_data['rc_count'] = jellyfish_data.apply(lambda row: get_reverse_complement_count(row, jellyfish_data), axis=1)
-    print(datetime.now())
-    # for i in range(len(jellyfish_data)//2):
-    #    rc = jellyfish_data.iloc[[i]]["seq"][0]
-    #    jellyfish_data.drop(get_reverse_complement(rc), inplace=True)
-
+    # calculate ratio of forward and backward k-mer frequencies
     jellyfish_data["ratio"] = round(jellyfish_data["seq_count"] / jellyfish_data["rev_complement_count"], 5)
-    #print(datetime.now())
-    #print(jellyfish_data.head())
-
-    jellyfish_data["deviation_%"] = jellyfish_data.apply(lambda row: get_deviation_percentage(row["ratio"]), axis=1)
+    # calculate deviation from 100% accuracy
+    jellyfish_data["strand_bias_%"] = jellyfish_data.apply(lambda row: get_strand_bias_percentage(row["ratio"]), axis=1)
+    # calculate CG content percentage
     jellyfish_data["CG_%"] = jellyfish_data.apply(lambda row: gc_percentage(row["seq"]), axis=1)
-    #print(datetime.now())
-    jellyfish_data = jellyfish_data.sort_values(by=["deviation_%"], ascending=False)
+    # sort data by bias in descending order
+    jellyfish_data = jellyfish_data.sort_values(by=["strand_bias_%"], ascending=False)
+    # save DataFrame into csv
     jellyfish_data.to_csv("df_" + os.path.basename(path.split(".")[0]) + ".csv", index=False)
 
 
@@ -229,7 +108,7 @@ def to_int(data):
     return data
 
 
-def get_deviation_percentage(ratio):
+def get_strand_bias_percentage(ratio):
     dev = ratio - 1 if ratio >= 1 else 1 - ratio
     return round(dev * 100, 3)
 
@@ -239,41 +118,29 @@ def gc_percentage(string):
     return round(cg, 3)
 
 
-def kmers(n):
-    return [p for p in itertools.product("ACGT", repeat=n)]
-
-
-def repetitions(n):
-    return list(itertools.combinations_with_replacement("ACGT", n))
-
-
 def get_kmers_to_remove(k):
-    all_kmers = [''.join(i) for i in  list(itertools.product("ACGT", repeat=k))]
-    forwards = all_kmers[:len(all_kmers)//2]
+    all_kmers = [''.join(i) for i in list(itertools.product("ACGT", repeat=k))]
+    forwards = all_kmers[:len(all_kmers) // 2]
     complements = []
 
-    for i in forwards:#range(len(a) - 1, (len(a))//2 - 1, -1):
+    for i in forwards:
         complements.append(get_reverse_complement(i))
     return forwards, complements
+
 
 def to_string(my_list):
     return ''.join(my_list)
 
-
-
-import itertools
-x = "ACGT"
 
 def convert(seq, forward):
     if seq in forward:
         return get_reverse_complement(seq)
     return seq
 
-for k in range(2, 11):
 
+for k in range(2, 11):
     print(datetime.now())
     print(k)
-    run_jellyfish2("pacbio_m54238_180628_014238.Q20.fastq", k)
-    jellyfish_to_DataFrame("output_" + str(k) + "_pacbio_m54238_180628_014238.Q20.fastq", k)
+    run_jellyfish("pacbio_m54238_180628_014238.Q20.fastq", k)
+    jellyfish_to_dataframe("output_" + str(k) + "_pacbio_m54238_180628_014238.Q20.fastq", k)
     print(datetime.now())
-
