@@ -1,5 +1,6 @@
 import os
 import Bio.SeqIO as SeqIO
+import numpy as np
 from dateutil.parser import parse as dparse
 import pandas as pd
 from pytz import utc
@@ -23,15 +24,15 @@ def select_cg_range(value):
 
 def select_label(value):
     if value == 0 or value == 10:
-        return "0-10% CG"
-    return "{}-{}% CG".format(str(value - 9), str(value))
+        return '0-10% CG'
+    return '{}-{}% CG'.format(str(value - 9), str(value))
 
 
 def plot_cg_content(df, output_name, order):
-    ranged_cg_df = df.apply(lambda row: select_cg_range(row["CG_%"]), axis=1)
+    ranged_cg_df = df.apply(lambda row: select_cg_range(row['CG_%']), axis=1)
     c = Counter(ranged_cg_df)
     print(c.keys())
-    labels = [select_label(key) for key in c.keys()]  # str(j*100/i) + "% CG" for j in range(1,i+1)
+    labels = [select_label(key) for key in c.keys()]
 
     print(labels)
     data = list(c.values())
@@ -39,7 +40,7 @@ def plot_cg_content(df, output_name, order):
     # Creating plot
     plt.figure(figsize=(10, 7))
     plt.pie(data, labels=labels)
-    plt.savefig(output_name + ".png")
+    plt.savefig(output_name + '.png')
 
 
 def plot_cg_from_dataframe(df_name):
@@ -47,21 +48,21 @@ def plot_cg_from_dataframe(df_name):
     df = pd.read_csv(df_name)
     plt.figure(figsize=(10, 10))
     fig, axs = plt.subplots(3, 3)
-    plot_cg_content(df, "cg_whole_file_" + os.path.basename(df_name), 0)
+    plot_cg_content(df, 'cg_whole_file_' + os.path.basename(df_name), 0)
 
     for percent in [1, 3, 5, 10]:
         index = index + 1
         df_head = df.head(int(len(df) * (percent / 100)))
         df_tail = df.tail(int(len(df) * (percent / 100)))
-        plot_cg_content(df_head, "cg_" + str(percent) + "%_highest_bias_" + os.path.basename(df_name), index + 1)
-        plot_cg_content(df_tail, "cg_" + str(percent) + "%_lowest_bias_" + os.path.basename(df_name), index + 2)
+        plot_cg_content(df_head, 'cg_' + str(percent) + '%_highest_bias_' + os.path.basename(df_name), index + 1)
+        plot_cg_content(df_tail, 'cg_' + str(percent) + '%_lowest_bias_' + os.path.basename(df_name), index + 2)
         index = index + 2
 
 
 # Nanopore bias comparation per hours
 
 def bin_nanopore(fastq):
-    file_type = "fastq" if fastq.split(".")[-1] == "fastq" else "fasta"
+    file_type = 'fastq' if fastq.split('.')[-1] == 'fastq' else 'fasta'
 
     batchfiles = []
     start = utc.localize(datetime.datetime.now())
@@ -77,11 +78,11 @@ def bin_nanopore(fastq):
     for record in SeqIO.parse(fastq, file_type):
         record_time = dparse([i for i in record.description.split() if i.startswith('start_time')][0].split('=')[1])
         batch = bisect.bisect_left(batches, record_time)
-        filename = "nanopore_{0}_batch_{1}.fasta".format(get_filename(fastq), batch, file_type)
+        filename = 'nanopore_{0}_batch_{1}.fasta'.format(get_filename(fastq), batch, file_type)
         if filename not in batchfiles:
             batchfiles.append(filename)
         f = open(filename, 'a')
-        f.write(record.format("fasta"))
+        f.write(record.format('fasta'))
         f.close()
 
 
@@ -103,32 +104,32 @@ def hours_aligned(start, end):
     return chunks
 
 
-def fill_sb_analysis(df_output, batch, stat_file):
+def fill_sb_analysis(df_output, k, batch, stat_file):
     df = pd.read_csv(df_output)
     filename = df_output
-    bias_mean = df["strand_bias_%"].mean().round(2)
-    bias_median = df["strand_bias_%"].median().round(2)
-    bias_modus = df["strand_bias_%"].round(2).mode().iloc[0]
-    bias_5_top = df.head(int(len(df) * (5 / 100)))["strand_bias_%"].median().round(2)
-    bias_5_bottom = df.tail(int(len(df) * (5 / 100)))["strand_bias_%"].median().round(2)
+    bias_mean = df['strand_bias_%'].mean().round(2)
+    bias_median = df['strand_bias_%'].median().round(2)
+    bias_modus = df['strand_bias_%'].round(2).mode().iloc[0]
+    percentile_5 = df['strand_bias_%'].quantile(0.05).round(2)
+    percentile_95 = df['strand_bias_%'].quantile(0.95).round(2)
 
     import csv
-    stat = [filename, batch, bias_mean, bias_median, bias_modus, bias_5_top, bias_5_bottom]
-    with open(stat_file, 'a') as f:
+    stat = [filename, k, batch, bias_mean, bias_median, bias_modus, percentile_5, percentile_95]
+    with open(stat_file, 'a', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(stat)
 
 
 def get_filename(name):
-    return os.path.basename(name).split(".")[0]
+    return os.path.basename(name).split('.')[0]
 
 
 def init_analysis(out_dir, filename):
     analysis = pd.DataFrame(
         data={},
         index=None,
-        columns=['file', 'batch', 'bias_mean', 'bias_median', 'bias_modus', 'bias_top_5', 'bias_bottom_5'])
-    analysis.to_csv(out_dir + "sb_analysis_" + filename + ".csv", index=False)
+        columns=['file', 'k', 'batch', 'bias_mean', 'bias_median', 'bias_modus', 'percentile_5', 'percentile_95'])
+    analysis.to_csv(out_dir + 'sb_analysis_' + filename + '.csv', index=False)
 
 
 def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25):
@@ -148,36 +149,48 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     return mean, confidence_interval
 
 
-def analysis(name, dir, start_kmer=5, end_kmer=10):
-    init_analysis(dir, name.split(".")[0])
-    for i in range(0, 49):
-        kmer = 10
-        fill_sb_analysis("df_output_" + str(kmer) + "_" + name.split("."[0]) + "_batch_" + str(i) + ".csv", i,
-                         "sb_analysis_" + str(name.split("."[0])) + ".csv")
-    for k in range(start_kmer, end_kmer + 1):
-        draw_conf_interval_graph(name)
+def analysis(input_dir, output_dir, name, start_kmer=5, end_kmer=10, batch_count=49):
+    #init_analysis(input_dir, name.split('.')[0])
+
+    for kmer in range(start_kmer, end_kmer + 1):
+        for batch in range(0, batch_count):
+            fill_sb_analysis(input_dir + 'df_output_' + str(kmer) + '_' + get_filename(name) + '_batch_' + str(batch) + '.csv',
+                             kmer, batch, input_dir + 'sb_analysis_' + get_filename(name) + '.csv')
+        draw_conf_interval_graph(input_dir, output_dir, get_filename(name), kmer, batch_count)
+        draw_basic_stats_lineplot(output_dir, get_filename(name), kmer, input_dir + 'sb_analysis_' + get_filename(name) + '.csv')
 
 
-def draw_conf_interval_graph(name, k, batch_count):
-    plt.xticks([x for x in range(49)], [str(x) for x in range(49)])
+def draw_conf_interval_graph(input_dir, output_dir, name, k, batch_count):
+    x = [x for x in range(batch_count)]
+    plt.figure(figsize=(15, 7))
+    plt.xticks(x, x)
     plt.title('Confidence Interval')
+    y = []
 
     for batch in range(batch_count):
-        print("in " + str(batch))
-        df = pd.read_csv("df_output_" + str(k) + "_" + name + "_batch_" + str(batch) + ".csv")
-        plot_confidence_interval(batch, df["strand_bias_%"])
-    plt.savefig("fig_ci_" + name + "_" + str(k) + ".png")
-    plt.show()
+        print('in ' + str(batch))
+        df = pd.read_csv(input_dir + 'df_output_' + str(k) + '_' + name + '_batch_' + str(batch) + '.csv')
+        mean, ci = plot_confidence_interval(batch, df['strand_bias_%'])
+        y.append(mean)
+    print(x)
+    z = np.polyfit(x, y, 1)  # polynomial fit
+    p = np.poly1d(z)
+    plt.plot(x, p(x), 'r--')
+    plt.savefig(output_dir + 'fig_ci_' + name + '_' + str(k) + '.png')
+    plt.close()
 
 
-def draw_basic_stats_lineplot(name, k):
-    df = pd.read_csv("strand_bias_analysis_6_2022-04-18.csv")
+def draw_basic_stats_lineplot(output_dir, name, k, statfile):
+    df = pd.read_csv(statfile)
+    df = df.loc[df['k'] == k]
 
     # Plot a simple line chart
+    plt.figure()
+    plt.title('Mean, Mode and Median of Strand Bias in Nanopore Data')
     plt.plot(df['batch'], df['bias_mean'], color='b', label='Mean value of strand bias')
     plt.plot(df['batch'], df['bias_median'], color='g', label='Median value of strand bias')
     plt.plot(df['batch'], df['bias_modus'], color='r', label='Mode value of strand bias')
 
     plt.legend()
-    plt.savefig("fig_lineplot_" + name + "_" + str(k) + ".png")
-    plt.show()
+    plt.savefig(output_dir + 'fig_lineplot_' + name + '_' + str(k) + '.png')
+    plt.close()
