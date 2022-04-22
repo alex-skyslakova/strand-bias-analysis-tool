@@ -16,12 +16,14 @@ import datetime
 
 # CG content
 
+# TODO not needed?
 def select_cg_range(value):
     for border in range(10, 100 + 1, 10):
         if value <= border:
             return border
 
 
+# TODO not needed?
 def select_label(value):
     if value == 0 or value == 10:
         return '0-10% CG'
@@ -160,14 +162,16 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
 
 
 def analysis(input_dir, output_dir, name, start_kmer=5, end_kmer=10, batch_count=49):
-    #init_analysis(input_dir, name.split('.')[0])
+    init_analysis(input_dir, name.split('.')[0])
 
     for kmer in range(start_kmer, end_kmer + 1):
         for batch in range(0, batch_count):
-            fill_sb_analysis(input_dir + 'df_output_' + str(kmer) + '_' + get_filename(name) + '_batch_' + str(batch) + '.csv',
-                             kmer, batch, input_dir + 'sb_analysis_' + get_filename(name) + '.csv')
+            fill_sb_analysis(
+                input_dir + 'df_output_' + str(kmer) + '_' + get_filename(name) + '_batch_' + str(batch) + '.csv',
+                kmer, batch, input_dir + 'sb_analysis_' + get_filename(name) + '.csv')
         draw_conf_interval_graph(input_dir, output_dir, get_filename(name), kmer, batch_count)
-        draw_basic_stats_lineplot(output_dir, get_filename(name), kmer, input_dir + 'sb_analysis_' + get_filename(name) + '.csv')
+        draw_basic_stats_lineplot(output_dir, get_filename(name), kmer,
+                                  input_dir + 'sb_analysis_' + get_filename(name) + '.csv')
 
 
 def draw_conf_interval_graph(input_dir, output_dir, name, k, batch_count):
