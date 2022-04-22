@@ -28,35 +28,45 @@ def select_label(value):
     return '{}-{}% CG'.format(str(value - 9), str(value))
 
 
-def plot_cg_content(df, output_name, order):
-    ranged_cg_df = df.apply(lambda row: select_cg_range(row['CG_%']), axis=1)
-    c = Counter(ranged_cg_df)
-    print(c.keys())
-    labels = [select_label(key) for key in c.keys()]
+def plot_cg_from_dataframe(input_dir, output_dir, filename, percent=5):
+    upper_cg = []
+    upper_biases = []
+    lower_cg = []
+    lower_biases = []
+    kmers = [x for x in range(5, 11)]
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))  # plt.figure(figsize=(10,7))
 
-    print(labels)
-    data = list(c.values())
-    print(data)
-    # Creating plot
-    plt.figure(figsize=(10, 7))
-    plt.pie(data, labels=labels)
-    plt.savefig(output_name + '.png')
+    for k in range(5, 11):
+        df = pd.read_csv(input_dir + "df_output_" + str(k) + "_" + filename + ".csv")
+
+        df_head = get_n_percent(df, percent)
+        upper_cg.append(df_head["CG_%"].mean().round(2))
+        upper_biases.append(df_head["strand_bias_%"].mean().round(2))
+
+        df_tail = get_n_percent(df, percent, True)
+        lower_cg.append(df_tail["CG_%"].mean().round(2))
+        lower_biases.append(df_tail["strand_bias_%"].mean().round(2))
+
+    ax1.set_title("CG content vs Strand Bias in top " + str(percent) + "% of SB score")
+    ax1.set_xlabel('Mean CG content [%]')
+    ax1.set_ylabel('Mean Strand bias [deviation from normal value in %]')
+    ax1.scatter(upper_cg, upper_biases, marker="^", color="red")
+
+    ax2.set_title("CG content vs Strand Bias in bottom " + str(percent) + "% of SB score")
+    ax2.set_xlabel('Mean CG content [%]')
+    ax2.set_ylabel('Mean Strand bias [deviation from normal value in %]')
+    ax2.scatter(lower_cg, lower_biases, marker="v", color="green")
+    for i, txt in enumerate(kmers):
+        ax1.annotate(" " + str(txt), (upper_cg[i], upper_biases[i]), fontsize=15)
+        ax2.annotate(" " + str(txt), (lower_cg[i], lower_biases[i]), fontsize=15)
+    plt.savefig(output_dir + "fig_cg_" + str(percent) + "%_" + filename + ".png")
 
 
-def plot_cg_from_dataframe(df_name):
-    index = 0
-    df = pd.read_csv(df_name)
-    plt.figure(figsize=(10, 10))
-    fig, axs = plt.subplots(3, 3)
-    plot_cg_content(df, 'cg_whole_file_' + os.path.basename(df_name), 0)
-
-    for percent in [1, 3, 5, 10]:
-        index = index + 1
-        df_head = df.head(int(len(df) * (percent / 100)))
-        df_tail = df.tail(int(len(df) * (percent / 100)))
-        plot_cg_content(df_head, 'cg_' + str(percent) + '%_highest_bias_' + os.path.basename(df_name), index + 1)
-        plot_cg_content(df_tail, 'cg_' + str(percent) + '%_lowest_bias_' + os.path.basename(df_name), index + 2)
-        index = index + 2
+def get_n_percent(df, n, tail=False):
+    if tail:
+        return df.tail(int(len(df) * (n / 100)))
+    else:
+        return df.head(int(len(df) * (n / 100)))
 
 
 # Nanopore bias comparation per hours
