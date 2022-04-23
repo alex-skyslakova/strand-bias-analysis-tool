@@ -6,10 +6,13 @@ import math
 import time
 from shutil import which
 import argparse
+
+from Bio import SeqIO
 from Bio.SeqIO.FastaIO import SimpleFastaParser
 import pandas as pd
 import utils
 from datetime import datetime
+import analysis
 
 COMPLEMENTS_DICT = {'A': 'T',
                     'C': 'G',
@@ -18,8 +21,10 @@ COMPLEMENTS_DICT = {'A': 'T',
 
 __version__ = '0.1.0'
 
+JELLYFISH_TO_DF_FORMAT = "output_{0}_{1}.fasta"
+JELLYFISH_TO_DF_BATCHES = "output_{0}_nanopore_{1}_batch_{2}.fasta"
 
-def main():
+def arg_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('input',
                         nargs='+',
@@ -30,56 +35,96 @@ def main():
                         default=False,
                         help='current version of the application'
                         )
-    parser.add_argument('-n', '--no-jellyfish',
+    parser.add_argument('-j', '--no-jellyfish',
+                        action='store_true',
                         default=False,
                         help='skip k-mer counting. Requires input in fasta file where id=count, seq=k-mer')
     parser.add_argument('-o', '--output',
                         # action='output',
                         nargs=1,
-                        default="sbat/",
+                        default=["sbat/"],
                         help='output directory')
     parser.add_argument('-m', '--mer',
                         nargs=1,
-                        default=0,
+                        default=[0],
+                        type=int,
                         help='k-mer to count and analyze bias for. When set to 0, bias is analyzed for all k-mer '
                              'in 5-10 range. MER must be >= 3 for analysis')
     parser.add_argument('-s', '--size',
-                        type=int,
                         nargs=1,
                         help='size of hash table for jellyfish')
     parser.add_argument('-t', '--threads',
                         nargs=1,
-                        default=1,
+                        type=int,
+                        default=[1],
                         help='number of threads jellyfish shall use for computations')
     parser.add_argument('-c', '--keep-computations',
                         action="store_true",
                         default=False,
                         help='keep jellyfish outputs and computations produced as partial results')
+    parser.add_argument('-n', '--detect-nanopore',
+                        action="store_true",
+                        default=False,
+                        help='identify nanopore datasets among inputs and provide advanced analysis')
     args = parser.parse_args()
+    return args, parser
+
+
+def main():
+    args, parser = arg_parser()
 
     if args.version:
         version()
+        return 1
 
     for input_file in args.input:
         if not os.path.isfile(input_file):
             print("no such file: " + input_file)
             parser.print_usage()
+            return 1
 
-    if args.output is not None and not os.path.isdir(args.output[0]):
-        print("no such directory: " + args.output[0])
-        parser.print_usage()
+    if not os.path.isdir(args.output[0]):
+        os.mkdir(args.output[0])
 
-    if not args.no_jellyfish:
-        if args.threads < 1:
-            print("number of threads must be a positive integer")
-            return
-        if args.mer < 3:
-            print("MER must be a positive number higher or equal to 3")
-        for file in args.input:
-            print(file)
-            # run_jellyfish(input_file=args.input, k=args.mer, t=args.threads)
-    else:
-        print("would run only analysis")
+    if args.mer[0] < 3 and args.mer[0] != 0:
+        print("MER must be a positive number higher or equal to 3")
+        return 1
+
+    if args.mer[0] == 0:
+        start_k = 5
+        end_k = 10
+    else:  # run with specified k
+        start_k = args.mer[0]
+        end_k = args.mer[0]
+
+    for file in args.input:
+        print(args.output[0], str(time.time()).split('.')[0])
+        sb_analysis = analysis.init_analysis(args.output[0], str(time.time()).split('.')[0])
+        print("input: " + file)
+
+        if args.no_jellyfish:
+            print("jellyfish disabled, running only analysis...")
+            for k in range(start_k, end_k + 1):
+                jellyfish_to_dataframe(file, k, sb_analysis=sb_analysis)
+
+        else:
+            jellyfish_outdir = os.path.join(args.output[0], 'jellyfish', '')
+            if not os.path.isdir(jellyfish_outdir):
+                os.mkdir(jellyfish_outdir)
+
+            if args.threads[0] < 1:
+                print("number of threads must be a positive integer")
+                return 1
+
+            for k in range(start_k, end_k + 1):
+                print("running computation and analysis for K=" + str(k))
+                jf_output = run_jellyfish(input_file=file, output_dir=jellyfish_outdir, k=k, t=args.threads[0])
+                jellyfish_to_dataframe(jf_output, k, sb_analysis=sb_analysis)
+
+                if args.detect_nanopore and check_if_nanopore(file):
+                    print('would analyze nanopore')
+                    nanopore_analysis(file, args.output[0], start_k=start_k, end_k=end_k, threads=args.threads[0] # TODO hash
+                                      )
 
 
 def version():
@@ -87,6 +132,18 @@ def version():
     Prints current version of the tool.
     """
     print("StrandBiasAnalysisTool v" + __version__)
+
+
+def check_if_nanopore(path):
+    """
+    Function to check if file contains timestamp in description (specific for nanopore data)
+    :param path: path to file
+    :return: bool
+    """
+    for rec in SeqIO.parse(path, path.split('.')[-1]):
+        if "start_time=" in rec.description:
+            return True
+        return False
 
 
 def get_reverse_complement(seq):
