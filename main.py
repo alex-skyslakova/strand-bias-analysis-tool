@@ -3,6 +3,7 @@ import os
 import subprocess
 
 import math
+import time
 from shutil import which
 
 from Bio.SeqIO.FastaIO import SimpleFastaParser
@@ -40,6 +41,11 @@ def run_jellyfish(input_file, output_dir, k=7, t=1, s='500M'):
 
 
 def parse_fasta(path):
+    """
+    Function to parse Jellyfish fasta output into list of sequences and list of their counts
+    :param path: path to Jellyfish output
+    :return: list of sequences, list of their counts
+    """
     seq = []
     seq_count = []
     with open(path) as fasta_file:
@@ -55,6 +61,11 @@ def parse_fasta(path):
 
 
 def jellyfish_to_dataframe(path, k):
+    """
+    Function to create dataframe with statistics based on Jellyfish output
+    :param path: path to Jellyfish output
+    :param k: length of kmers in given file
+    """
     seq, seq_count = parse_fasta(path)
 
     # create dataframe with k-mers and their counts
@@ -93,25 +104,22 @@ def jellyfish_to_dataframe(path, k):
     jellyfish_data.to_csv("df_" + os.path.basename(path.split(".")[0]) + ".csv", index=False)
 
 
-def get_reverse_complement_count(act_row, data):
-    try:
-        count = data.loc[act_row['rev_complement']]['seq_count']
-        return float(count)
-    except KeyError:
-        return math.nan
-
-
-def to_int(data):
-    data = data.apply(lambda x: x.astype(int) if x is not None else math.nan)
-    return data
-
-
 def get_strand_bias_percentage(ratio):
+    """
+    Function to count difference between kmers ratio and expected value (1, which means no bias) in percents.
+    :param ratio: ratio of kmer and its reverse complement
+    :return: deviation from 1 in %
+    """
     dev = ratio - 1 if ratio >= 1 else 1 - ratio
     return round(dev * 100, 3)
 
 
 def gc_percentage(string):
+    """
+    Function to compute percentage of Cs and Gs in string.
+    :param string: string to compute percentage in
+    :return: percentage of CG content
+    """
     cg = (string.count("C") + string.count("G")) / len(string) * 100
     return round(cg, 3)
 
