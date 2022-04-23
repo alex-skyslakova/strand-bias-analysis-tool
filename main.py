@@ -71,7 +71,7 @@ def jellyfish_to_dataframe(path, k):
                                                             axis=1)
     # split sequence set into forward and backward sequences (so that k-mer and its reverse complement
     # are not together in group)
-    fwd_kmers, bwd_kmers = get_kmers_to_remove(k)
+    fwd_kmers, bwd_kmers = split_forwards_and_backwards(k)
 
     # remove backward group from DataFrame, as it is already represented as reverse complement to some
     # other k-mer in the DataFrame
@@ -118,15 +118,25 @@ def gc_percentage(string):
     return round(cg, 3)
 
 
-def get_kmers_to_remove(k):
+def split_forwards_and_backwards(k):
+    """
+    Function to divide all possible kmers of length k into two groups, where one contains complements of another
+    """
+    # generate all possible combinations of length k
     all_kmers = [''.join(i) for i in list(itertools.product("ACGT", repeat=k))]
-    forwards = all_kmers[:len(all_kmers) // 2]
-    complements = []
 
-    for i in forwards:
-        complements.append(get_reverse_complement(i))
-    return forwards, complements
+    # use sets for faster lookup
+    forwards = set()
+    complements = set()
 
+    for kmer in all_kmers:
+        if kmer in complements:
+            continue
+        else:
+            forwards.add(kmer)
+            complements.add(get_reverse_complement(kmer))
+
+    return list(forwards), list(complements)
 
 def to_string(my_list):
     return ''.join(my_list)
