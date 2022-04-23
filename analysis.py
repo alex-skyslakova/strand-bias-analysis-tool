@@ -90,13 +90,13 @@ def bin_nanopore(fastq):
     for record in SeqIO.parse(fastq, file_type):
         record_time = dparse([i for i in record.description.split() if i.startswith('start_time')][0].split('=')[1])
         batch = bisect.bisect_left(batches, record_time)
-        filename = 'nanopore_{0}_batch_{1}.fasta'.format(get_filename(fastq), batch, file_type)
+        filename = os.path.join(os.path.dirname(fastq), NANOPORE_BIN_FORMAT.format(get_filename(fastq), batch))
         if filename not in batchfiles:
             batchfiles.append(filename)
         f = open(filename, 'a')
         f.write(record.format('fasta'))
         f.close()
-
+    return batchfiles
 
 def filter_time(descr, tfrom, tto):
     # extract start time from description
@@ -141,7 +141,10 @@ def init_analysis(out_dir, filename):
         data={},
         index=None,
         columns=['file', 'k', 'batch', 'bias_mean', 'bias_median', 'bias_modus', 'percentile_5', 'percentile_95'])
-    analysis.to_csv(out_dir + 'sb_analysis_' + filename + '.csv', index=False)
+    analysis_name = os.path.join(out_dir, 'sb_analysis_' + filename + '.csv')
+    print(analysis_name)
+    analysis.to_csv(analysis_name, index=False)
+    return analysis_name
 
 
 def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25):
@@ -194,16 +197,20 @@ def draw_conf_interval_graph(input_dir, output_dir, name, k, batch_count):
     plt.close()
 
 
-def draw_basic_stats_lineplot(output_dir, name, k, statfile):
+
+def draw_basic_stats_lineplot(output_dir, name, statfile, k, x_axis='k'):
     df = pd.read_csv(statfile)
-    df = df.loc[df['k'] == k]
+
+    # if k is set and x_axis=batch, plotting nanopore split data
+    if k is not None:
+        df = df.loc[df['k'] == k]
 
     # Plot a simple line chart
     plt.figure()
     plt.title('Mean, Mode and Median of Strand Bias in Nanopore Data')
-    plt.plot(df['batch'], df['bias_mean'], color='b', label='Mean value of strand bias')
-    plt.plot(df['batch'], df['bias_median'], color='g', label='Median value of strand bias')
-    plt.plot(df['batch'], df['bias_modus'], color='r', label='Mode value of strand bias')
+    plt.plot(df[x_axis], df['bias_mean'], color='b', label='Mean value of strand bias')
+    plt.plot(df[x_axis], df['bias_median'], color='g', label='Median value of strand bias')
+    plt.plot(df[x_axis], df['bias_modus'], color='r', label='Mode value of strand bias')
 
     plt.legend()
     plt.savefig(output_dir + 'fig_lineplot_' + name + '_' + str(k) + '.png')
