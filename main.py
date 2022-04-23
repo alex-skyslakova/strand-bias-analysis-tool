@@ -7,6 +7,7 @@ from shutil import which
 
 from Bio.SeqIO.FastaIO import SimpleFastaParser
 import pandas as pd
+import utils
 from datetime import datetime
 
 COMPLEMENTS_DICT = {'A': 'T',
@@ -27,17 +28,14 @@ def get_reverse_complement(seq):
     return reverse_complement
 
 
-def is_tool(name):
-    """Check whether `name` is on PATH and marked as executable."""
-
-    return which(name) is not None
-
-
-def run_jellyfish(input_file, k=7):
-    calculate = "jellyfish count -m " + str(k) + " -s 500M " + input_file
+def run_jellyfish(input_file, output_dir, k=7, t=1, s='500M'):
+    dump_file = os.path.join(output_dir, "mer_counts.jf")
+    calculate = "jellyfish count -m " + str(k) + " -s " + s + " -t " + str(t) + " -o " + dump_file + " " + input_file
+    print(calculate)
     subprocess.run(calculate.split(" "), stdout=subprocess.PIPE)
-    dump = "jellyfish dump mer_counts.jf"
-    with open("output_" + str(k) + "_" + os.path.basename(input_file), "w") as outfile:
+    dump = "jellyfish dump " + dump_file
+    output_file = os.path.join(output_dir, "output_" + str(k) + "_" + os.path.basename(input_file))
+    with open(output_file, "w") as outfile:
         subprocess.run(dump.split(" "), stdout=outfile)
 
 
