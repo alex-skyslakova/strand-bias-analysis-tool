@@ -30,15 +30,15 @@ def select_label(value):
     return '{}-{}% CG'.format(str(value - 9), str(value))
 
 
-def plot_cg_from_dataframe(input_dir, output_dir, filename, percent=5):
+def plot_cg_from_dataframe(input_dir, output_dir, filename, percent=5, start_kmer=5, end_kmer=10):
     upper_cg = []
     upper_biases = []
     lower_cg = []
     lower_biases = []
-    kmers = [x for x in range(5, 11)]
+    kmers = [x for x in range(start_kmer, end_kmer + 1)]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))  # plt.figure(figsize=(10,7))
 
-    for k in range(5, 11):
+    for k in range(start_kmer, end_kmer + 1):
         df = pd.read_csv(input_dir + "df_output_" + str(k) + "_" + filename + ".csv")
 
         df_head = get_n_percent(df, percent)
