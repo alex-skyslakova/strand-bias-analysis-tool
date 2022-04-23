@@ -5,7 +5,7 @@ import subprocess
 import math
 import time
 from shutil import which
-
+import argparse
 from Bio.SeqIO.FastaIO import SimpleFastaParser
 import pandas as pd
 import utils
@@ -15,6 +15,78 @@ COMPLEMENTS_DICT = {'A': 'T',
                     'C': 'G',
                     'G': 'C',
                     'T': 'A'}
+
+__version__ = '0.1.0'
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input',
+                        nargs='+',
+                        type=str,
+                        help='fasta or fastq file to count and analyze strand bias on')
+    parser.add_argument('-v', '--version',
+                        action="store_true",
+                        default=False,
+                        help='current version of the application'
+                        )
+    parser.add_argument('-n', '--no-jellyfish',
+                        default=False,
+                        help='skip k-mer counting. Requires input in fasta file where id=count, seq=k-mer')
+    parser.add_argument('-o', '--output',
+                        # action='output',
+                        nargs=1,
+                        default="sbat/",
+                        help='output directory')
+    parser.add_argument('-m', '--mer',
+                        nargs=1,
+                        default=0,
+                        help='k-mer to count and analyze bias for. When set to 0, bias is analyzed for all k-mer '
+                             'in 5-10 range. MER must be >= 3 for analysis')
+    parser.add_argument('-s', '--size',
+                        type=int,
+                        nargs=1,
+                        help='size of hash table for jellyfish')
+    parser.add_argument('-t', '--threads',
+                        nargs=1,
+                        default=1,
+                        help='number of threads jellyfish shall use for computations')
+    parser.add_argument('-c', '--keep-computations',
+                        action="store_true",
+                        default=False,
+                        help='keep jellyfish outputs and computations produced as partial results')
+    args = parser.parse_args()
+
+    if args.version:
+        version()
+
+    for input_file in args.input:
+        if not os.path.isfile(input_file):
+            print("no such file: " + input_file)
+            parser.print_usage()
+
+    if args.output is not None and not os.path.isdir(args.output[0]):
+        print("no such directory: " + args.output[0])
+        parser.print_usage()
+
+    if not args.no_jellyfish:
+        if args.threads < 1:
+            print("number of threads must be a positive integer")
+            return
+        if args.mer < 3:
+            print("MER must be a positive number higher or equal to 3")
+        for file in args.input:
+            print(file)
+            # run_jellyfish(input_file=args.input, k=args.mer, t=args.threads)
+    else:
+        print("would run only analysis")
+
+
+def version():
+    """
+    Prints current version of the tool.
+    """
+    print("StrandBiasAnalysisTool v" + __version__)
 
 
 def get_reverse_complement(seq):
