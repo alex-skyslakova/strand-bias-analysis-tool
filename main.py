@@ -167,6 +167,7 @@ def run_jellyfish(input_file, output_dir, k=7, t=1, s='500M'):
     output_file = os.path.join(output_dir, "output_" + str(k) + "_" + os.path.basename(input_file))
     with open(output_file, "w") as outfile:
         subprocess.run(dump.split(" "), stdout=outfile)
+    return output_file
 
 
 def parse_fasta(path):
@@ -189,7 +190,7 @@ def parse_fasta(path):
     return seq, seq_count
 
 
-def jellyfish_to_dataframe(path, k):
+def jellyfish_to_dataframe(path, k, save=True, sb_analysis=None):
     """
     Function to create dataframe with statistics based on Jellyfish output
     :param path: path to Jellyfish output
@@ -229,8 +230,14 @@ def jellyfish_to_dataframe(path, k):
     jellyfish_data["CG_%"] = jellyfish_data.apply(lambda row: gc_percentage(row["seq"]), axis=1)
     # sort data by bias in descending order
     jellyfish_data = jellyfish_data.sort_values(by=["strand_bias_%"], ascending=False)
-    # save DataFrame into csv
-    jellyfish_data.to_csv("df_" + os.path.basename(path.split(".")[0]) + ".csv", index=False)
+
+    if sb_analysis:
+        analysis.fill_sb_analysis_from_df("df_" + os.path.basename(path.split(".")[0]) + ".csv", jellyfish_data,
+                                          k, None, sb_analysis)
+    if save:
+        jellyfish_data.to_csv(os.path.join(os.path.dirname(sb_analysis), "df_" + os.path.basename(path.split(".")[0]) + ".csv"), index=False)
+
+    return jellyfish_data
 
 
 def get_strand_bias_percentage(ratio):
@@ -273,19 +280,41 @@ def split_forwards_and_backwards(k):
 
     return list(forwards), list(complements)
 
-def to_string(my_list):
-    return ''.join(my_list)
 
 
-def convert(seq, forward):
-    if seq in forward:
-        return get_reverse_complement(seq)
-    return seq
+
+# input = complete name and path
+def nanopore_analysis(input, output_dir, start_k=5, end_k=10, threads=1, hash_size="100M"):
+    batch_files = analysis.bin_nanopore(input)
+    print(batch_files)
+    if len(batch_files) < 2:
+        print("data duration is too short for analysis of hour-long batches, aborting...")
+        return
+    sb_analysis = analysis.init_analysis(os.path.dirname(input), utils.get_filename(input))
+    dataframe = pd.DataFrame(
+        data={},
+        columns=['seq', 'seq_count', 'rev_complement', 'rev_complement_count', 'ratio', 'strand_bias_%', 'CG_%'])
+    for k in range(start_k, end_k + 1):
+        for index, file in enumerate(batch_files):
+            run_jellyfish(file, output_dir, k, threads, hash_size)
+            print("after run")
+            df_file = JELLYFISH_TO_DF_BATCHES.format(k, utils.get_filename(input), index)
+            dataframe = pd.concat([dataframe, jellyfish_to_dataframe(df_file, k)])
+            analysis.fill_sb_analysis_from_df(df_file, dataframe, k, index, sb_analysis)
+        analysis.draw_conf_interval_graph(os.path.dirname(input), output_dir, utils.get_filename(input), k,
+                                          len(batch_files), dataframe)
+        analysis.draw_basic_stats_lineplot(output_dir, utils.get_filename(input), sb_analysis, k, x_axis="batch")
 
 
-for k in range(2, 11):
-    print(datetime.now())
-    print(k)
-    run_jellyfish("pacbio_m54238_180628_014238.Q20.fastq", k)
-    jellyfish_to_dataframe("output_" + str(k) + "_pacbio_m54238_180628_014238.Q20.fastq", k)
-    print(datetime.now())
+'''for k in range(5, 11):
+    for i in range(0, 49):
+        print(datetime.now())
+        print(k)
+        #run_jellyfish("nanopore_GM24385_11.fasta", k)
+        jellyfish_to_dataframe("nanopore/output/" + "output_" + str(k) + "_nanopore_nanopore_GM24385_11_batch_" + str(i) +".fasta", k)
+        print(datetime.now())'''
+
+if __name__ == '__main__':
+    main()
+
+# nanopore_analysis("nanotest.fasta", "", )
