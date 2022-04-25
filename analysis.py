@@ -13,6 +13,10 @@ import bisect
 import dateutil.rrule as rrule
 import datetime
 
+import utils
+
+NANOPORE_BIN_FORMAT = 'nanopore_{0}_batch_{1}.fasta'
+NANOPORE_BIN_DF_FORMAT = 'output_{0}_nanopore_{1}_batch_{2}.csv'
 
 # CG content
 
@@ -73,30 +77,59 @@ def get_n_percent(df, n, tail=False):
 
 # Nanopore bias comparation per hours
 
-def bin_nanopore(fastq):
+def bin_nanopore(fastq, interval=2):
     file_type = 'fastq' if fastq.split('.')[-1] == 'fastq' else 'fasta'
 
     batchfiles = []
     start = utc.localize(datetime.datetime.now())
     end = utc.localize(datetime.datetime(1970, 1, 1, 0, 0, 0))
+
     for record in SeqIO.parse(fastq, file_type):
         record_time = dparse([i for i in record.description.split() if i.startswith('start_time')][0].split('=')[1])
         if record_time < start:
             start = record_time
         if record_time > end:
             end = record_time
-    batches = hours_aligned(start, end)
+    batches = hours_aligned(start, end, interval)
+    sequences_per_batch = [0 for _ in range(len(batches))]
 
     for record in SeqIO.parse(fastq, file_type):
         record_time = dparse([i for i in record.description.split() if i.startswith('start_time')][0].split('=')[1])
         batch = bisect.bisect_left(batches, record_time)
+        sequences_per_batch[batch] += 1
         filename = os.path.join(os.path.dirname(fastq), NANOPORE_BIN_FORMAT.format(get_filename(fastq), batch))
         if filename not in batchfiles:
             batchfiles.append(filename)
         f = open(filename, 'a')
         f.write(record.format('fasta'))
         f.close()
+
+    plot_bin_distribution(sequences_per_batch, utils.get_filename(fastq))
     return batchfiles
+
+def plot_bin_distribution(sequences_per_bin, filename):
+    bins = [x for x in range(len(sequences_per_bin))]
+
+    fig, ax = plt.subplots(figsize=(18, 12))
+
+    ax.set_ylabel('Sequence counts', size=15)
+    ax.set_title('Sequence counts per bin', size=15)
+    ax.set_xlabel('Bins', size=15)
+    x = np.arange(len(bins)) * 2
+    ax.set_xticks(x)
+    ax.set_xticklabels(bins, size=10)
+    bar_width = 1
+    pps = ax.bar(x - bar_width / 2, sequences_per_bin, bar_width, label='Sequence counts')
+    for p in pps:
+        height = p.get_height()
+        ax.annotate('{}'.format(height),
+                    xy=(p.get_x() + p.get_width() / 2, height),
+                    xytext=(0, 4),  # 4 points vertical offset
+                    textcoords="offset points",
+                    ha='center', va='bottom', rotation=800)
+
+    plt.savefig("fig_seq_per_bins_" + filename + ".png")
+
 
 def filter_time(descr, tfrom, tto):
     # extract start time from description
