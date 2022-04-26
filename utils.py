@@ -9,16 +9,14 @@ def to_int(data):
     data = data.apply(lambda x: x.astype(int) if x is not None else math.nan)
     return data
 
-
-'''ef to_string(my_list):
-    return ''.join(my_list)'''
-
-
-'''def convert(seq, forward):
-    if seq in forward:
-        return get_reverse_complement(seq)
-    return seq'''
-
+def unique_path(f):
+    fnew = f
+    root, ext = os.path.splitext(f)
+    i = 0
+    while os.path.exists(fnew):
+        i += 1
+        fnew = '%s_%i%s' % (root, i, ext)
+    return fnew
 
 '''def get_reverse_complement_count(act_row, data):
     try:

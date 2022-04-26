@@ -3,6 +3,7 @@ import os
 import subprocess
 
 import math
+import sys
 import time
 from shutil import which
 import argparse
@@ -97,34 +98,32 @@ def main():
         start_k = args.mer[0]
         end_k = args.mer[0]
 
+    if args.threads[0] < 1:
+        print("number of threads must be a positive integer")
+        return 1
+
+    jellyfish_outdir = os.path.join(args.output[0], 'jellyfish', '')
+    if not os.path.isdir(jellyfish_outdir):
+        os.mkdir(jellyfish_outdir)
+
     for file in args.input:
         print(args.output[0], str(time.time()).split('.')[0])
         sb_analysis = analysis.init_analysis(args.output[0], str(time.time()).split('.')[0])
         print("input: " + file)
 
-        if args.no_jellyfish:
-            print("jellyfish disabled, running only analysis...")
-            for k in range(start_k, end_k + 1):
-                jellyfish_to_dataframe(file, k, sb_analysis=sb_analysis)
-
-        else:
-            jellyfish_outdir = os.path.join(args.output[0], 'jellyfish', '')
-            if not os.path.isdir(jellyfish_outdir):
-                os.mkdir(jellyfish_outdir)
-
-            if args.threads[0] < 1:
-                print("number of threads must be a positive integer")
-                return 1
-
-            for k in range(start_k, end_k + 1):
+        for k in range(start_k, end_k + 1):
+            if not args.no_jellyfish:
                 print("running computation and analysis for K=" + str(k))
                 jf_output = run_jellyfish(input_file=file, output_dir=jellyfish_outdir, k=k, t=args.threads[0])
-                jellyfish_to_dataframe(jf_output, k, sb_analysis=sb_analysis)
 
                 if args.detect_nanopore and check_if_nanopore(file):
                     print('would analyze nanopore')
-                    nanopore_analysis(file, args.output[0], start_k=start_k, end_k=end_k, threads=args.threads[0] # TODO hash
-                                      )
+                    nanopore_analysis(file, args.output[0], start_k=start_k, end_k=end_k,
+                                      threads=args.threads[0])  # TODO hash
+            else:
+                print("jellyfish disabled, running only analysis...")
+                jf_output = file
+            jellyfish_to_dataframe(jf_output, k, sb_analysis=sb_analysis, output="out/sbat/dump")
 
 
 def version():
@@ -190,13 +189,15 @@ def parse_fasta(path):
     return seq, seq_count
 
 
-def jellyfish_to_dataframe(path, k, save=True, sb_analysis=None):
+def jellyfish_to_dataframe(path, k, output="sbat/dump", save=False, sb_analysis=None, batch=None):
     """
     Function to create dataframe with statistics based on Jellyfish output
     :param path: path to Jellyfish output
     :param k: length of kmers in given file
     """
     seq, seq_count = parse_fasta(path)
+    if len(seq) == 0:
+        sys.exit("no data parsed from {}".format(path))
 
     # create dataframe with k-mers and their counts
     jellyfish_data = pd.DataFrame(
@@ -231,11 +232,13 @@ def jellyfish_to_dataframe(path, k, save=True, sb_analysis=None):
     # sort data by bias in descending order
     jellyfish_data = jellyfish_data.sort_values(by=["strand_bias_%"], ascending=False)
 
+    filename = utils.unique_path("df_{}.csv".format(os.path.basename(path.split(".")[0])))
     if sb_analysis:
         analysis.fill_sb_analysis_from_df("df_" + os.path.basename(path.split(".")[0]) + ".csv", jellyfish_data,
-                                          k, None, sb_analysis)
+                                          k, batch, sb_analysis)
     if save:
-        jellyfish_data.to_csv(os.path.join(os.path.dirname(sb_analysis), "df_" + os.path.basename(path.split(".")[0]) + ".csv"), index=False)
+        filename = utils.unique_path(os.path.join(output, filename))
+        jellyfish_data.to_csv(filename, index=False)
 
     return jellyfish_data
 
@@ -284,9 +287,9 @@ def split_forwards_and_backwards(k):
 
 
 # input = complete name and path
-def nanopore_analysis(input, output_dir, start_k=5, end_k=10, threads=1, hash_size="100M"):
-    batch_files = analysis.bin_nanopore(input)
-    print(batch_files)
+def nanopore_analysis(input, output_dir, start_k=5, end_k=10, threads=1, hash_size="300M", bin_interval=1):
+    batch_files = analysis.bin_nanopore(input, bin_interval)
+    #batch_files = ["nanopore/subsamples_50M/nanopore_nanopore_GM24385_11_batch_" + str(i) + ".fasta" for i in range(49)]
     if len(batch_files) < 2:
         print("data duration is too short for analysis of hour-long batches, aborting...")
         return
@@ -295,24 +298,17 @@ def nanopore_analysis(input, output_dir, start_k=5, end_k=10, threads=1, hash_si
         data={},
         columns=['seq', 'seq_count', 'rev_complement', 'rev_complement_count', 'ratio', 'strand_bias_%', 'CG_%'])
     for k in range(start_k, end_k + 1):
+        batch_dfs = []
         for index, file in enumerate(batch_files):
             run_jellyfish(file, output_dir, k, threads, hash_size)
-            print("after run")
-            df_file = JELLYFISH_TO_DF_BATCHES.format(k, utils.get_filename(input), index)
-            dataframe = pd.concat([dataframe, jellyfish_to_dataframe(df_file, k)])
-            analysis.fill_sb_analysis_from_df(df_file, dataframe, k, index, sb_analysis)
-        analysis.draw_conf_interval_graph(os.path.dirname(input), output_dir, utils.get_filename(input), k,
-                                          len(batch_files), dataframe)
+            df_file = os.path.join(output_dir, JELLYFISH_TO_DF_BATCHES.format(k, utils.get_filename(input), index))
+            current_df = jellyfish_to_dataframe(df_file, k, sb_analysis=sb_analysis, batch=index)
+            dataframe = pd.concat([dataframe, current_df])
+            batch_dfs.append(current_df)
+            #analysis.fill_sb_analysis_from_df(df_file, dataframe, k, index, sb_analysis)
+        analysis.draw_conf_interval_graph(batch_dfs, output_dir, utils.get_filename(input), k)
         analysis.draw_basic_stats_lineplot(output_dir, utils.get_filename(input), sb_analysis, k, x_axis="batch")
 
-
-'''for k in range(5, 11):
-    for i in range(0, 49):
-        print(datetime.now())
-        print(k)
-        #run_jellyfish("nanopore_GM24385_11.fasta", k)
-        jellyfish_to_dataframe("nanopore/output/" + "output_" + str(k) + "_nanopore_nanopore_GM24385_11_batch_" + str(i) +".fasta", k)
-        print(datetime.now())'''
 
 if __name__ == '__main__':
     main()

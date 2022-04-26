@@ -77,7 +77,7 @@ def get_n_percent(df, n, tail=False):
 
 # Nanopore bias comparation per hours
 
-def bin_nanopore(fastq, interval=2):
+def bin_nanopore(fastq, interval=1):
     file_type = 'fastq' if fastq.split('.')[-1] == 'fastq' else 'fasta'
 
     batchfiles = []
@@ -97,7 +97,7 @@ def bin_nanopore(fastq, interval=2):
         record_time = dparse([i for i in record.description.split() if i.startswith('start_time')][0].split('=')[1])
         batch = bisect.bisect_left(batches, record_time)
         sequences_per_batch[batch] += 1
-        filename = os.path.join(os.path.dirname(fastq), NANOPORE_BIN_FORMAT.format(get_filename(fastq), batch))
+        filename = utils.unique_path(os.path.join(os.path.dirname(fastq), NANOPORE_BIN_FORMAT.format(utils.get_filename(fastq), batch)))
         if filename not in batchfiles:
             batchfiles.append(filename)
         f = open(filename, 'a')
@@ -107,13 +107,14 @@ def bin_nanopore(fastq, interval=2):
     plot_bin_distribution(sequences_per_batch, utils.get_filename(fastq))
     return batchfiles
 
+
 def plot_bin_distribution(sequences_per_bin, filename):
     bins = [x for x in range(len(sequences_per_bin))]
 
     fig, ax = plt.subplots(figsize=(18, 12))
 
     ax.set_ylabel('Sequence counts', size=15)
-    ax.set_title('Sequence counts per bin', size=15)
+    ax.set_title('Sequence counts per bin - ' + filename, size=15)
     ax.set_xlabel('Bins', size=15)
     x = np.arange(len(bins)) * 2
     ax.set_xticks(x)
@@ -126,37 +127,42 @@ def plot_bin_distribution(sequences_per_bin, filename):
                     xy=(p.get_x() + p.get_width() / 2, height),
                     xytext=(0, 4),  # 4 points vertical offset
                     textcoords="offset points",
-                    ha='center', va='bottom', rotation=800)
+                    ha='center', va='bottom', rotation=90)
 
-    plt.savefig("fig_seq_per_bins_" + filename + ".png")
+    fig_name = utils.unique_path("fig_seq_per_bins_{}.png".format(filename))
+    plt.savefig(fig_name)
 
 
-def filter_time(descr, tfrom, tto):
+def filter_time(descr, time_from, time_to):
     # extract start time from description
     time = dparse([i for i in descr.split() if i.startswith('start_time')][0].split('=')[1])
-    if dparse(tfrom) <= time <= dparse(tto):
+    if dparse(time_from) <= time <= dparse(time_to):
         return True
     else:
         return False
 
 
-def hours_aligned(start, end):
+def hours_aligned(start, end, interval=1):
     chunks = []
-    rule = rrule.rrule(rrule.HOURLY, byminute=0, bysecond=0, dtstart=start)
+    rule = rrule.rrule(rrule.HOURLY, byminute=0, bysecond=0, dtstart=start, interval=interval)
     for x in rule.between(start, end, inc=False):
         chunks.append(x)
     chunks.append(end)
     return chunks
 
+# TODO possibly remove
+def fill_sb_analysis(output_csv, k, batch, stat_file):
+    df = pd.read_csv(output_csv)
+    fill_sb_analysis_from_df(output_csv, df, k, batch, stat_file)
 
-def fill_sb_analysis(df_output, k, batch, stat_file):
-    df = pd.read_csv(df_output)
-    filename = df_output
+
+def fill_sb_analysis_from_df(df_name, df, k, batch, stat_file):
+    filename = df_name
     bias_mean = df['strand_bias_%'].mean().round(2)
     bias_median = df['strand_bias_%'].median().round(2)
-    bias_modus = df['strand_bias_%'].round(2).mode().iloc[0]
-    percentile_5 = df['strand_bias_%'].quantile(0.05).round(2)
-    percentile_95 = df['strand_bias_%'].quantile(0.95).round(2)
+    bias_modus = df['strand_bias_%'].mode().iloc[0]
+    percentile_5 = round(df['strand_bias_%'].quantile(0.05), 2)
+    percentile_95 = round(df['strand_bias_%'].quantile(0.95), 2)
 
     import csv
     stat = [filename, k, batch, bias_mean, bias_median, bias_modus, percentile_5, percentile_95]
@@ -164,9 +170,8 @@ def fill_sb_analysis(df_output, k, batch, stat_file):
         writer = csv.writer(f)
         writer.writerow(stat)
 
-
-def get_filename(name):
-    return os.path.basename(name).split('.')[0]
+def get_binned_sb_info(df):
+    pass#df.apply(lambda row: get_strand_bias_percentage(row["ratio"]), axis=1
 
 
 def init_analysis(out_dir, filename):
@@ -174,8 +179,8 @@ def init_analysis(out_dir, filename):
         data={},
         index=None,
         columns=['file', 'k', 'batch', 'bias_mean', 'bias_median', 'bias_modus', 'percentile_5', 'percentile_95'])
-    analysis_name = os.path.join(out_dir, 'sb_analysis_' + filename + '.csv')
-    print(analysis_name)
+    analysis_name = utils.unique_path(os.path.join(out_dir, 'sb_analysis_' + filename + '.csv'))
+    print("analysis stored in: {}".format(analysis_name))
     analysis.to_csv(analysis_name, index=False)
     return analysis_name
 
@@ -197,36 +202,48 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     return mean, confidence_interval
 
 
-def analysis(input_dir, output_dir, name, start_kmer=5, end_kmer=10, batch_count=49):
-    init_analysis(input_dir, name.split('.')[0])
-
+def analysis(analysis_full_path, output_dir, name, start_kmer=5, end_kmer=10, batch_count=49):
+    #sb_analysis = init_analysis(analysis_full_path, name.split('.')[0])
+    #df_analysis = pd.read_csv(sb_analysis)
     for kmer in range(start_kmer, end_kmer + 1):
-        for batch in range(0, batch_count):
-            fill_sb_analysis(
-                input_dir + 'df_output_' + str(kmer) + '_' + get_filename(name) + '_batch_' + str(batch) + '.csv',
-                kmer, batch, input_dir + 'sb_analysis_' + get_filename(name) + '.csv')
-        draw_conf_interval_graph(input_dir, output_dir, get_filename(name), kmer, batch_count)
-        draw_basic_stats_lineplot(output_dir, get_filename(name), kmer,
-                                  input_dir + 'sb_analysis_' + get_filename(name) + '.csv')
+        draw_conf_interval_graph(analysis_full_path, output_dir, utils.get_filename(name), kmer, batch_count)
+        draw_basic_stats_lineplot(output_dir, utils.get_filename(name),
+                                  analysis_full_path, kmer)
 
 
-def draw_conf_interval_graph(input_dir, output_dir, name, k, batch_count):
-    x = [x for x in range(batch_count)]
+def draw_conf_interval_graph(dataframes, output_dir, name, k='', start_index=0):
+    x = [x + start_index for x in range(len(dataframes))]
     plt.figure(figsize=(15, 7))
     plt.xticks(x, x)
     plt.title('Confidence Interval')
     y = []
 
-    for batch in range(batch_count):
-        print('in ' + str(batch))
-        df = pd.read_csv(input_dir + 'df_output_' + str(k) + '_' + name + '_batch_' + str(batch) + '.csv')
-        mean, ci = plot_confidence_interval(batch, df['strand_bias_%'])
+    plt.ylabel("Strand bias")
+    if k is None or k == '':
+        plt.xlabel("K")
+    else:
+        plt.xlabel("Bins")
+
+    for index, df in enumerate(dataframes):
+        index = start_index + index
+        print('in ' + str(index))
+         #df = df_batch.loc[df_batch["seq"].str.len() == k] #pd.read_csv(input_dir + 'df_output_' + str(k) + '_' + name + '_batch_' + str(batch) + '.csv')
+        if df.shape[0] < 3:
+            plt.close()
+            return
+        mean, ci = plot_confidence_interval(index, df['strand_bias_%'])
         y.append(mean)
-    print(x)
-    z = np.polyfit(x, y, 1)  # polynomial fit
-    p = np.poly1d(z)
-    plt.plot(x, p(x), 'r--')
-    plt.savefig(output_dir + 'fig_ci_' + name + '_' + str(k) + '.png')
+
+    if len(x) > 1 and len(y) > 1:
+        try:
+            z = np.polyfit(x, y, 1)  # polynomial fit
+            p = np.poly1d(z)
+            plt.plot(x, p(x), 'r--')
+        except Exception as e:
+            print("Error occurred during fitting linear regression: {}\nskipping...".format(e))
+
+    fig_name = utils.unique_path(os.path.join(output_dir, 'fig_ci_' + name + '_' + str(k) + '.png'))
+    plt.savefig(fig_name)
     plt.close()
 
 
@@ -241,10 +258,16 @@ def draw_basic_stats_lineplot(output_dir, name, statfile, k, x_axis='k'):
     # Plot a simple line chart
     plt.figure()
     plt.title('Mean, Mode and Median of Strand Bias in Nanopore Data')
+    plt.ylabel("Strand bias")
+    if x_axis == 'k':
+        plt.xlabel("K")
+    else:
+        plt.xlabel("Bins")
     plt.plot(df[x_axis], df['bias_mean'], color='b', label='Mean value of strand bias')
     plt.plot(df[x_axis], df['bias_median'], color='g', label='Median value of strand bias')
     plt.plot(df[x_axis], df['bias_modus'], color='r', label='Mode value of strand bias')
 
     plt.legend()
-    plt.savefig(output_dir + 'fig_lineplot_' + name + '_' + str(k) + '.png')
+    fig_name = utils.unique_path(os.path.join(output_dir, 'fig_lineplot_' + name + '_' + str(k) + '.png'))
+    plt.savefig(fig_name)
     plt.close()
