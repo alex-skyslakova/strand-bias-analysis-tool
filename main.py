@@ -1,18 +1,15 @@
 import itertools
 import os
-import subprocess
-
-import math
 import sys
-import time
-from shutil import which
 import argparse
 
 from Bio import SeqIO
 from Bio.SeqIO.FastaIO import SimpleFastaParser
 import pandas as pd
+
+import jellyfish
+import nanopore
 import utils
-from datetime import datetime
 import analysis
 
 COMPLEMENTS_DICT = {'A': 'T',
@@ -59,6 +56,19 @@ def arg_parser():
                         type=int,
                         default=[1],
                         help='number of threads jellyfish shall use for computations')
+    parser.add_argument('-r', '--subsample-reads',
+                        nargs=1,
+                        type=int, # TODO convert to format of hash?
+                        help='select number of reads you want to use in analysis per one bin, default all')
+    parser.add_argument('-b', '--subsample-bases',
+                        nargs=1,
+                        type=int, # TODO convert to format of hash?
+                        help='select number of nucleotides you want to use in analysis per one bin, default all')
+    parser.add_argument('-i', '--bin-interval',
+                        nargs=1,
+                        type=int,
+                        default=[1],
+                        help='number of hours that would fall into one bin when analysing nanopore')
     parser.add_argument('-c', '--keep-computations',
                         action="store_true",
                         default=False,
@@ -68,57 +78,86 @@ def arg_parser():
                         default=False,
                         help='identify nanopore datasets among inputs and provide advanced analysis')
     args = parser.parse_args()
-    return args, parser
+    analysis_args = args_checker(args)
+    return analysis_args
 
-
-def main():
-    args, parser = arg_parser()
+def args_checker(args):
+    jf = None
+    nano = None
+    a_args = analysis.Analysis()
 
     if args.version:
         version()
-        return 1
+        sys.exit(0)
 
     for input_file in args.input:
         if not os.path.isfile(input_file):
-            print("no such file: " + input_file)
-            parser.print_usage()
-            return 1
+            sys.exit("no such file: {}".format(input_file))
 
     if not os.path.isdir(args.output[0]):
         os.mkdir(args.output[0])
 
+    a_args.set_output(args.output[0])
+
     if args.mer[0] < 3 and args.mer[0] != 0:
-        print("MER must be a positive number higher or equal to 3")
-        return 1
+        sys.exit("MER must be a positive number higher or equal to 3")
+
+    if args.no_jellyfish and args.detect_nanopore:
+        sys.exit("cannot detect nanopore when jellyfish off - nanopore requires jellyfish for analyses")
+
+    if not args.no_jellyfish:
+        jf = jellyfish.Jellyfish()
+        jf.jf_dir = args.output[0]
+        if args.threads[0] < 1:
+            print("number of threads must be a positive integer")
+            return 1
+        else:
+            a_args.threads = args.threads[0]
+            jf.threads = args.threads[0]
+
+        # TODO parse hash size
 
     if args.mer[0] == 0:
-        start_k = 5
-        end_k = 10
-    else:  # run with specified k
-        start_k = args.mer[0]
-        end_k = args.mer[0]
+        # default boundaries to iterate upon
+        a_args.start_k = 5
+        a_args.end_k = 10
+    else:
+        # run with specified k
+        a_args.start_k = args.mer[0]
+        a_args.end_k = args.mer[0]
 
-    if args.threads[0] < 1:
-        print("number of threads must be a positive integer")
-        return 1
+    if args.detect_nanopore:
+        nano = nanopore.Nanopore()
+        nano.init_common(a_args)
 
-    jellyfish_outdir = os.path.join(args.output[0], 'jellyfish', '')
-    if not os.path.isdir(jellyfish_outdir):
-        os.mkdir(jellyfish_outdir)
+        if args.subsample_reads is not None:
+            nano.subs_reads = args.subsample_reads[0]
+        if args.subsample_bases is not None:
+            nano.subs_bases = args.subsample_bases[0]
+        if args.bin_interval is not None:
+            nano.bin_interval = args.bin_interval[0]
 
-    for file in args.input:
-        print(args.output[0], str(time.time()).split('.')[0])
-        sb_analysis = analysis.init_analysis(args.output[0], str(time.time()).split('.')[0])
+
+
+    return a_args, jf, nano, args.input
+
+
+def main():
+    analysis, jf, nano, input_files = arg_parser()
+
+    for file in input_files:
+
+        sb_analysis = analysis.init_analysis()
         print("input: " + file)
 
-        for k in range(start_k, end_k + 1):
-            if not args.no_jellyfish:
+        for k in range(analysis.start_k, analysis.end_k + 1):
+            if jf is not None:
                 print("running computation and analysis for K=" + str(k))
-                jf_output = run_jellyfish(input_file=file, output_dir=jellyfish_outdir, k=k, t=args.threads[0])
+                jf_output = jf.run_jellyfish(file, k)
 
-                if args.detect_nanopore and check_if_nanopore(file):
+                if nano is not None and check_if_nanopore(file):
                     print('would analyze nanopore')
-                    nanopore_analysis(file, args.output[0], start_k=start_k, end_k=end_k,
+                    nano.nanopore_analysis(file, args.output[0], start_k=start_k, end_k=end_k,
                                       threads=args.threads[0])  # TODO hash
             else:
                 print("jellyfish disabled, running only analysis...")
@@ -155,18 +194,6 @@ def get_reverse_complement(seq):
     for n in reversed(seq):
         reverse_complement += COMPLEMENTS_DICT[n.capitalize()]
     return reverse_complement
-
-
-def run_jellyfish(input_file, output_dir, k=7, t=1, s='500M'):
-    dump_file = os.path.join(output_dir, "mer_counts.jf")
-    calculate = "jellyfish count -m " + str(k) + " -s " + s + " -t " + str(t) + " -o " + dump_file + " " + input_file
-    print(calculate)
-    subprocess.run(calculate.split(" "), stdout=subprocess.PIPE)
-    dump = "jellyfish dump " + dump_file
-    output_file = os.path.join(output_dir, "output_" + str(k) + "_" + os.path.basename(input_file))
-    with open(output_file, "w") as outfile:
-        subprocess.run(dump.split(" "), stdout=outfile)
-    return output_file
 
 
 def parse_fasta(path):
@@ -286,31 +313,28 @@ def split_forwards_and_backwards(k):
 
 
 
-# input = complete name and path
-def nanopore_analysis(input, output_dir, start_k=5, end_k=10, threads=1, hash_size="300M", bin_interval=1):
-    batch_files = analysis.bin_nanopore(input, bin_interval)
-    #batch_files = ["nanopore/subsamples_50M/nanopore_nanopore_GM24385_11_batch_" + str(i) + ".fasta" for i in range(49)]
-    if len(batch_files) < 2:
-        print("data duration is too short for analysis of hour-long batches, aborting...")
-        return
-    sb_analysis = analysis.init_analysis(os.path.dirname(input), utils.get_filename(input))
-    dataframe = pd.DataFrame(
-        data={},
-        columns=['seq', 'seq_count', 'rev_complement', 'rev_complement_count', 'ratio', 'strand_bias_%', 'CG_%'])
-    for k in range(start_k, end_k + 1):
-        batch_dfs = []
-        for index, file in enumerate(batch_files):
-            run_jellyfish(file, output_dir, k, threads, hash_size)
-            df_file = os.path.join(output_dir, JELLYFISH_TO_DF_BATCHES.format(k, utils.get_filename(input), index))
-            current_df = jellyfish_to_dataframe(df_file, k, sb_analysis=sb_analysis, batch=index)
-            dataframe = pd.concat([dataframe, current_df])
-            batch_dfs.append(current_df)
-            #analysis.fill_sb_analysis_from_df(df_file, dataframe, k, index, sb_analysis)
-        analysis.draw_conf_interval_graph(batch_dfs, output_dir, utils.get_filename(input), k)
-        analysis.draw_basic_stats_lineplot(output_dir, utils.get_filename(input), sb_analysis, k, x_axis="batch")
-
-
 if __name__ == '__main__':
     main()
+    #nanopore_analysis("nanopore/subsamples_50M/nanopore_GM24385_11.fasta", "nanopore/subsamples_50M/", end_k=8)
+#analysis.draw_basic_stats_lineplot("nanopore/subsamples_50M", "subsamples_50M", "nanopore\subsamples_50M\sb_analysis_nanopore_GM24385_11.csv", k=None, x_axis="batch")
+'''
+    batch_files = analysis.bin_nanopore("nanopore/per_2h/nanopore_GM24385_11.fasta")
+    print(batch_files)
+    sb = analysis.init_analysis("figures/newest/", "nanopore_whole")
+    dfs = []
+    for k in range(4, 11):
 
-# nanopore_analysis("nanotest.fasta", "", )
+
+        for i in range(25):
+            df = pd.read_csv(
+                r"nanopore/per_2h/df_output_"+ str(k) + "_nanopore_nanopore_GM24385_11_batch_" + str(i) +".csv"
+            )
+            # print(df.shape[0])
+            dfs.append(df)
+            analysis.fill_sb_analysis_from_df(
+                "df_output_" + str(k) +  "_nanopore_nanopore_GM24385_11_batch_" + str(i) +"_2h.csv", df, k, i, sb)
+
+    analysis.plot_conf_interval_graph(dfs, "figures/newest/", "nanopore_2h")
+    analysis.draw_basic_stats_lineplot("figures/newest/", "nanopore_2h", sb, k=None, x_axis="batch")
+'''
+
