@@ -13,6 +13,7 @@ import bisect
 import dateutil.rrule as rrule
 import datetime
 
+import main
 import utils
 
 
@@ -52,6 +53,10 @@ class Analysis:
         self.whisker = whisker
         self.threads = threads
 
+    def set_file(self, file):
+        self.filepath = file
+        self.filename = utils.get_filename(file)
+
     def set_output(self, dir):
         self.out_dir = os.path.join(dir, self.out_dir)
         self.fig_dir = os.path.join(dir, self.fig_dir)
@@ -77,10 +82,10 @@ class Analysis:
         lower_cg = []
         lower_biases = []
         kmers = [x for x in range(self.start_k, self.end_k + 1)]
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 15))
 
         for k in range(self.start_k, self.end_k + 1):
-            df = pd.read_csv(self.dump_dir + "df_output_{}_{}.csv".format(k, self.filename))
+            df = pd.read_csv(os.path.join(self.dump_dir, "df_output_{}_{}.csv".format(k, self.filename)))
 
             df_head = utils.get_n_percent(df, self.whisker)
             upper_cg.append(df_head["CG_%"].mean().round(2))
@@ -92,13 +97,20 @@ class Analysis:
 
         ax1.set_title("CG content vs Strand Bias in top " + str(self.whisker) + "% of SB score")
         ax1.set_xlabel('Mean CG content [%]')
-        ax1.set_ylabel('Mean Strand bias [deviation from normal value in %]')
+        ax1.set_ylabel('Mean Strand bias [%]')
         ax1.scatter(upper_cg, upper_biases, marker="^", color="red")
 
         ax2.set_title("CG content vs Strand Bias in bottom " + str(self.whisker) + "% of SB score")
         ax2.set_xlabel('Mean CG content [%]')
-        ax2.set_ylabel('Mean Strand bias [deviation from normal value in %]')
+        ax2.set_ylabel('Mean Strand bias [%]')
         ax2.scatter(lower_cg, lower_biases, marker="v", color="green")
+
+        ax3.set_title("CG content vs Strand Bias in bottom and top " + str(self.whisker) + "% of SB score")
+        ax3.set_xlabel('Mean CG content [%]')
+        ax3.set_ylabel('Mean Strand bias [%]')
+        ax3.scatter(lower_cg, lower_biases, marker="v", color="green")
+        ax3.scatter(upper_cg, upper_biases, marker="^", color="red")
+
         for i, txt in enumerate(kmers):
             ax1.annotate(" " + str(txt), (upper_cg[i], upper_biases[i]), fontsize=15)
             ax2.annotate(" " + str(txt), (lower_cg[i], lower_biases[i]), fontsize=15)
@@ -107,7 +119,10 @@ class Analysis:
         plt.savefig(fig_path)
 
     def plot_conf_interval_graph(self, dataframes, k='', start_index=0): # TODO fix args
-        x = [x + start_index for x in range(len(dataframes))]
+        if k is None or k=="":
+            x = [x + start_index for x in range(len(dataframes))]
+        else:
+            x = [x for x in range(len(dataframes))]
         plt.figure(figsize=(15, 7))
         plt.xticks(x, x)
         plt.title('Confidence Interval')
@@ -120,7 +135,8 @@ class Analysis:
             plt.xlabel("Bins")
 
         for index, df in enumerate(dataframes):
-            index = start_index + index
+            if k is None or k == "":
+                index = start_index + index
             if df.shape[0] < 3:
                 plt.close()
                 return
@@ -129,17 +145,18 @@ class Analysis:
 
         if len(x) > 1 and len(y) > 1:
             try:
-                z = np.polyfit(x, y, 1)  # polynomial fit
+                z = np.polyfit(x, y, 3)  # polynomial fit
                 p = np.poly1d(z)
                 plt.plot(x, p(x), 'r--')
             except Exception as e:
                 print("Error occurred during fitting linear regression: {}\nskipping...".format(e))
-
-        fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_ci_{0}_{1}.png'.format(self.filename, k)))
+        print(k)
+        fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_ci_{0}_{1}_newer.png'.format(self.filename, k)))
+        print(fig_name)
         plt.savefig(fig_name)
         plt.close()
 
-    def draw_basic_stats_lineplot(self, name, statfile, k, x_axis='k'):
+    def draw_basic_stats_lineplot(self, name, statfile, k=None, x_axis='k'):
         df = pd.read_csv(statfile)
 
         # if k is set and x_axis=batch, plotting nanopore split data
@@ -177,24 +194,27 @@ class Analysis:
             writer = csv.writer(f)
             writer.writerow(stat)
 
+    def plot_kmers_vs_bias(self, df, k):
+        df["more_freq_count"] = df.apply(lambda row: select_more_frequent(row), axis=1)
+        df = df.sort_values(by=['more_freq_count'], ascending=False)
+        kmers = df["seq"]
+        bias = df["strand_bias_%"]
 
+        plt.figure(figsize=(35, 10))
+        #plt.show()
+        plt.title("K-mers of length {} vs strand bias".format(k))
+        plt.xlabel('K-mers')
+        plt.ylabel('Strand bias [%]')
+        ax = plt.scatter(kmers, bias, marker="o", color="green", s=6)
+        if k > 5:
+            ax.axes.xaxis.set_ticks([])
+        else:
+            plt.xticks(range(len(df["seq"])), kmers, rotation=90, fontsize=3.5)
 
-
-
-# TODO possibly remove
-'''
-def fill_sb_analysis(output_csv, k, batch, stat_file):
-    df = pd.read_csv(output_csv)
-    fill_sb_analysis_from_df(output_csv, df, k, batch, stat_file)
-'''
-
-
-
-def get_binned_sb_info(df):
-    pass#df.apply(lambda row: get_strand_bias_percentage(row["ratio"]), axis=1
-
-
-
+        fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_kmer_vs_bias_{0}_k{1}.png'.format(self.filename, k)))
+        print(fig_name)
+        plt.savefig(fig_name, dpi=400)
+        plt.close()
 
 
 def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25):
@@ -213,24 +233,12 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
 
     return mean, confidence_interval
 
-'''
-def analysis(analysis_full_path, output_dir, name, start_kmer=5, end_kmer=10, batch_count=49):
-    #sb_analysis = init_analysis(analysis_full_path, name.split('.')[0])
-    #df_analysis = pd.read_csv(sb_analysis)
-    for kmer in range(start_kmer, end_kmer + 1):
-        draw_conf_interval_graph(analysis_full_path, output_dir, utils.get_filename(name), kmer, batch_count)
-        draw_basic_stats_lineplot(output_dir, utils.get_filename(name),
-                                  analysis_full_path, kmer)
-
-'''
-
-
-
-
-'''
-x = []
-for i in range(49):
-    x.append(pd.read_csv(r"Users\alexa\Documents\School\sbapr\strand-bias-analysis-tool\nanopore\output\df_output_8_nanopore_nanopore_GM24385_11_batch_{0}.csv".format(i)))
-
-plot_conf_interval_graph(x, '', 'test_analysis_k8')'''
-#analysis("nanopore/batches/", "nanopore/batches/", "nanopore_nanopore_GM24385_11")
+def select_more_frequent(row, seq=False):
+    if row["seq_count"] > row["rev_complement_count"]:
+        if seq:
+            return row["seq"]
+        return row["seq_count"]
+    else:
+        if seq:
+            return row["rev_complement"]
+        return row["rev_complement_count"]
