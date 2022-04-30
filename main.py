@@ -107,7 +107,7 @@ def args_checker(args):
 
     if not args.no_jellyfish:
         jf = jellyfish.Jellyfish()
-        jf.jf_dir = args.output[0]
+        jf.set_outdir(args.output[0])
         if args.threads[0] < 1:
             print("number of threads must be a positive integer")
             return 1
@@ -128,7 +128,7 @@ def args_checker(args):
 
     if args.detect_nanopore:
         nano = nanopore.Nanopore()
-        nano.init_common(a_args)
+        nano.init_common(a_args, jf)
 
         if args.subsample_reads is not None:
             nano.subs_reads = args.subsample_reads[0]
@@ -146,10 +146,10 @@ def main():
     analysis, jf, nano, input_files = arg_parser()
 
     for file in input_files:
-
+        analysis.set_file(file)
         sb_analysis = analysis.init_analysis()
         print("input: " + file)
-
+        dfs = []
         for k in range(analysis.start_k, analysis.end_k + 1):
             if jf is not None:
                 print("running computation and analysis for K=" + str(k))
@@ -157,12 +157,17 @@ def main():
 
                 if nano is not None and check_if_nanopore(file):
                     print('would analyze nanopore')
-                    nano.nanopore_analysis(file, args.output[0], start_k=start_k, end_k=end_k,
-                                      threads=args.threads[0])  # TODO hash
+                    nano.nanopore_analysis(file)
             else:
                 print("jellyfish disabled, running only analysis...")
                 jf_output = file
-            jellyfish_to_dataframe(jf_output, k, sb_analysis=sb_analysis, output="out/sbat/dump")
+            df = jellyfish_to_dataframe(jf_output, k, sb_analysis=sb_analysis, output="out/sbat/dump", analysis=analysis)
+            dfs.append(df)
+            analysis.plot_kmers_vs_bias(df, k)
+        analysis.draw_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
+        analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
+        analysis.plot_cg_from_dataframe()
+
 
 
 def version():
@@ -251,7 +256,7 @@ def jellyfish_to_dataframe(path, k, output="sbat/dump", save=False, sb_analysis=
     jellyfish_data.rename(columns={"seq_count_": "rev_complement_count"}, inplace=True)
 
     # calculate ratio of forward and backward k-mer frequencies
-    jellyfish_data["ratio"] = round(jellyfish_data["seq_count"] / jellyfish_data["rev_complement_count"], 5)
+    jellyfish_data["ratio"] = jellyfish_data.apply(lambda row: get_ratio(row["seq_count"], row["rev_complement_count"]), axis=1)
     # calculate deviation from 100% accuracy
     jellyfish_data["strand_bias_%"] = jellyfish_data.apply(lambda row: get_strand_bias_percentage(row["ratio"]), axis=1)
     # calculate CG content percentage
@@ -261,14 +266,17 @@ def jellyfish_to_dataframe(path, k, output="sbat/dump", save=False, sb_analysis=
 
     filename = utils.unique_path("df_{}.csv".format(os.path.basename(path.split(".")[0])))
     if sb_analysis:
-        analysis.fill_sb_analysis_from_df("df_" + os.path.basename(path.split(".")[0]) + ".csv", jellyfish_data,
-                                          k, batch, sb_analysis)
+        analysis.fill_sb_analysis_from_df(jellyfish_data, k, batch)
     if save:
         filename = utils.unique_path(os.path.join(output, filename))
         jellyfish_data.to_csv(filename, index=False)
 
     return jellyfish_data
 
+def get_ratio(x, y):
+    if x < y:
+        return round(x / y, 6)
+    return round(y / x, 6)
 
 def get_strand_bias_percentage(ratio):
     """
@@ -276,8 +284,7 @@ def get_strand_bias_percentage(ratio):
     :param ratio: ratio of kmer and its reverse complement
     :return: deviation from 1 in %
     """
-    dev = ratio - 1 if ratio >= 1 else 1 - ratio
-    return round(dev * 100, 3)
+    return 100 - (ratio * 100)
 
 
 def gc_percentage(string):
@@ -305,8 +312,10 @@ def split_forwards_and_backwards(k):
         if kmer in complements:
             continue
         else:
-            forwards.add(kmer)
-            complements.add(get_reverse_complement(kmer))
+            kmers = [kmer, get_reverse_complement(kmer)]
+            kmers.sort()
+            forwards.add(kmers[0])
+            complements.add(kmers[1])
 
     return list(forwards), list(complements)
 
