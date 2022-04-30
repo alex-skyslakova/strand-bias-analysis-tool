@@ -8,6 +8,8 @@ from Bio import SeqIO
 from matplotlib import pyplot as plt
 from pytz import utc
 from dateutil.parser import parse as dparse
+
+import main
 import utils
 import bisect
 
@@ -23,18 +25,18 @@ class Nanopore:
         self.subs_bases = math.inf
         self.bin_interval = interval
 
-    def init_common(self, analysis):
+    def init_common(self, analysis, jf):
         self.common = analysis
-        self.jf = analysis.jf
+        self.jf = jf
 
     # input = complete name and path
-    def nanopore_analysis(self, input, threads=1, hash_size="300M"):
+    def nanopore_analysis(self, input):
         batch_files = self.bin_nanopore(input, self.bin_interval)
         # batch_files = ["nanopore/subsamples_50M/nanopore_nanopore_GM24385_11_batch_" + str(i) + ".fasta" for i in range(49)]
         if len(batch_files) < 2:
             print("data duration is too short for analysis of hour-long batches, aborting...")
             return
-        sb_analysis = self.common.init_analysis(os.path.dirname(input), utils.get_filename(input))
+        sb_analysis = self.common.init_analysis()
         dataframe = pd.DataFrame(
             data={},
             columns=['seq', 'seq_count', 'rev_complement', 'rev_complement_count', 'ratio', 'strand_bias_%', 'CG_%'])
@@ -91,7 +93,7 @@ class Nanopore:
         self.plot_bin_distribution(bases_per_batch, utils.get_filename(fastq), "Nucleotides")
         return batchfiles
 
-    def plot_bin_distribution(self, counts_per_bin, what_of="Reads"):
+    def plot_bin_distribution(self, counts_per_bin, filename, what_of="Reads"):
         bins = [x for x in range(len(counts_per_bin))]
 
         fig, ax = plt.subplots(figsize=(18, 12))
@@ -112,5 +114,5 @@ class Nanopore:
                         textcoords="offset points",
                         ha='center', va='bottom', rotation=90)
 
-        fig_name = utils.unique_path("fig_{}_per_bins_{}.png".format(what_of.lower(), self.common.filename))
+        fig_name = utils.unique_path(os.path.join(self.common.fig_dir, "fig_{}_per_bins_{}.png".format(what_of.lower(), filename)))
         plt.savefig(fig_name)
