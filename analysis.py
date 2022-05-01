@@ -50,8 +50,10 @@ class Analysis:
         self.fig_dir = os.path.join(output_dir, 'sbat', 'figures')
         self.dump_dir = os.path.join(output_dir, 'sbat', 'dump') # output files, mer.jf, dfs, removed in the end unless --kep-computations
         self.sb_analysis_file = None #os.path.join(output_dir, 'sbat', 'sb_analysis_' + utils.get_filename(file) + ".csv")
+        self.np_sb_analysis_file = None
         self.whisker = whisker
         self.threads = threads
+        self.keep_computations = False
 
     def set_file(self, file):
         self.filepath = file
@@ -65,53 +67,121 @@ class Analysis:
         utils.is_or_create_dir(self.fig_dir)
         utils.is_or_create_dir(self.dump_dir)
 
-    def init_analysis(self):
+    def jellyfish_to_dataframe(self, path, k, batch=None):
+        """
+        Function to create dataframe with statistics based on Jellyfish output
+        :param path: path to Jellyfish output
+        :param k: length of kmers in given file
+        """
+        seq, seq_count = utils.parse_fasta(path)
+        if len(seq) == 0:
+            sys.exit("no data parsed from {}".format(path))
+
+        # create dataframe with k-mers and their counts
+        jellyfish_data = pd.DataFrame(
+            data={'seq': seq,
+                  'seq_count': seq_count},
+            index=seq,
+            columns=['seq', 'seq_count'])
+
+        # add column with reverse complements
+        jellyfish_data['rev_complement'] = jellyfish_data.apply(lambda row: utils.get_reverse_complement(row["seq"]),
+                                                                axis=1)
+        # split sequence set into forward and backward sequences (so that k-mer and its reverse complement
+        # are not together in group)
+        fwd_kmers, bwd_kmers = utils.split_forwards_and_backwards(k)
+
+        # remove backward group from DataFrame, as it is already represented as reverse complement to some
+        # other k-mer in the DataFrame
+        jellyfish_forward = jellyfish_data.drop(bwd_kmers, errors="ignore").set_index("rev_complement")
+
+        # join forward DF with original one on index (equal to forward sequence) in order to connect info about
+        # forward and backward datasets
+        jellyfish_data = jellyfish_data.reset_index().join(jellyfish_forward, on="index", rsuffix="_", lsuffix="").drop(
+            columns=["seq_", "index"], axis=1).dropna()
+
+        if len(jellyfish_data.index) == 0:
+            return None
+
+        jellyfish_data.rename(columns={"seq_count_": "rev_complement_count"}, inplace=True)
+
+        # calculate ratio of forward and backward k-mer frequencies
+        jellyfish_data["ratio"] = jellyfish_data.apply(
+            lambda row: utils.get_ratio(row["seq_count"], row["rev_complement_count"]), axis=1)
+        # calculate deviation from 100% accuracy
+        jellyfish_data["strand_bias_%"] = jellyfish_data.apply(lambda row: utils.get_strand_bias_percentage(row["ratio"]),
+                                                               axis=1)
+        # calculate CG content percentage
+        jellyfish_data["CG_%"] = jellyfish_data.apply(lambda row: utils.gc_percentage(row["seq"]), axis=1)
+        # sort data by bias in descending order
+        jellyfish_data = jellyfish_data.sort_values(by=["strand_bias_%"], ascending=False)
+
+        filename = utils.unique_path("df_{}.csv".format(os.path.basename(path.split(".")[0])))
+        #if sb_analysis:
+        self.fill_sb_analysis_from_df(jellyfish_data, k, batch)
+        if self.keep_computations:
+            filename = utils.unique_path(os.path.join(self.dump_dir, filename))
+            jellyfish_data.to_csv(filename, index=False)
+
+        return jellyfish_data
+
+    def init_analysis(self, nanopore=False):
         analysis = pd.DataFrame(
             data={},
             index=None,
             columns=['file', 'k', 'batch', 'bias_mean', 'bias_median', 'bias_modus', 'percentile_5', 'percentile_95'])
-        analysis_name = utils.unique_path(os.path.join(self.out_dir, 'sb_analysis_' + self.filename + '.csv'))
+
+        if nanopore:
+            analysis_name = utils.unique_path(os.path.join(self.out_dir, 'np_sb_analysis_' + self.filename + '.csv'))
+        else:
+            analysis_name = utils.unique_path(os.path.join(self.out_dir, 'sb_analysis_' + self.filename + '.csv'))
+            self.sb_analysis_file = analysis_name
         print("analysis stored in: {}".format(analysis_name))
         analysis.to_csv(analysis_name, index=False)
-        self.sb_analysis_file = analysis_name
         return analysis_name
 
-    def plot_cg_from_dataframe(self):
+    def plot_cg_from_dataframe(self, dfs):
+        if all(x is None for x in dfs):
+            return
         upper_cg = []
         upper_biases = []
         lower_cg = []
         lower_biases = []
-        kmers = [x for x in range(self.start_k, self.end_k + 1)]
+        kmers = []
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 15))
 
-        for k in range(self.start_k, self.end_k + 1):
-            df = pd.read_csv(os.path.join(self.dump_dir, "df_output_{}_{}.csv".format(k, self.filename)))
-
+        for i, df in enumerate(dfs):
+            if df is None or len(utils.get_n_percent(df, self.whisker).index) == 0:
+                continue
+            kmers.append(i + self.start_k)
             df_head = utils.get_n_percent(df, self.whisker)
+
             upper_cg.append(df_head["CG_%"].mean().round(2))
             upper_biases.append(df_head["strand_bias_%"].mean().round(2))
 
             df_tail = utils.get_n_percent(df, self.whisker, True)
-            lower_cg.append(df_tail["CG_%"].mean().round(2))
-            lower_biases.append(df_tail["strand_bias_%"].mean().round(2))
+            lower_cg.append(None if len(df_head.index) == 0 else df_tail["CG_%"].mean().round(2))
+            lower_biases.append(None if len(df_head.index) == 0 else df_tail["strand_bias_%"].mean().round(2))
+
+        x_label = 'Mean CG content [%]'
+        y_label = 'Mean Strand bias [%]'
+        for ax in [ax1, ax2, ax3]:
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
 
         ax1.set_title("CG content vs Strand Bias in top " + str(self.whisker) + "% of SB score")
-        ax1.set_xlabel('Mean CG content [%]')
-        ax1.set_ylabel('Mean Strand bias [%]')
         ax1.scatter(upper_cg, upper_biases, marker="^", color="red")
 
         ax2.set_title("CG content vs Strand Bias in bottom " + str(self.whisker) + "% of SB score")
-        ax2.set_xlabel('Mean CG content [%]')
-        ax2.set_ylabel('Mean Strand bias [%]')
         ax2.scatter(lower_cg, lower_biases, marker="v", color="green")
 
         ax3.set_title("CG content vs Strand Bias in bottom and top " + str(self.whisker) + "% of SB score")
-        ax3.set_xlabel('Mean CG content [%]')
-        ax3.set_ylabel('Mean Strand bias [%]')
         ax3.scatter(lower_cg, lower_biases, marker="v", color="green")
         ax3.scatter(upper_cg, upper_biases, marker="^", color="red")
 
         for i, txt in enumerate(kmers):
+            if dfs[i] is None:
+                continue
             ax1.annotate(" " + str(txt), (upper_cg[i], upper_biases[i]), fontsize=15)
             ax2.annotate(" " + str(txt), (lower_cg[i], lower_biases[i]), fontsize=15)
         fig_path = os.path.join(self.fig_dir, "fig_cg_{0}%_{1}.png".format(str(self.whisker), self.filename))
@@ -125,21 +195,25 @@ class Analysis:
             x = [x for x in range(len(dataframes))]
         plt.figure(figsize=(15, 7))
         plt.xticks(x, x)
-        plt.title('Confidence Interval')
+        if k is None or k=="":
+            plt.title('Confidence Interval among Bins')
+        else:
+            plt.title('Confidence Interval for K={}'.format(k))
         y = []
 
-        plt.ylabel("Strand bias")
+        plt.ylabel("Strand bias [%]")
         if k is None or k == '':
             plt.xlabel("K")
         else:
             plt.xlabel("Bins")
 
-        for index, df in enumerate(dataframes):
+        for df in dataframes:
+            if df is None or df.shape[0] < 3:
+                continue
+            index = utils.get_bin_number()
             if k is None or k == "":
                 index = start_index + index
-            if df.shape[0] < 3:
-                plt.close()
-                return
+
             mean, ci = plot_confidence_interval(index, df['strand_bias_%'])
             y.append(mean)
 
@@ -151,7 +225,7 @@ class Analysis:
             except Exception as e:
                 print("Error occurred during fitting linear regression: {}\nskipping...".format(e))
         print(k)
-        fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_ci_{0}_{1}_newer.png'.format(self.filename, k)))
+        fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_ci_{0}_{1}.png'.format(self.filename, k)))
         print(fig_name)
         plt.savefig(fig_name)
         plt.close()
@@ -165,7 +239,7 @@ class Analysis:
 
         # Plot a simple line chart
         plt.figure()
-        plt.title('Mean, Mode and Median of Strand Bias in Nanopore Data')
+        plt.title('Mean and Median of Strand Bias in Nanopore Data')
         plt.ylabel("Strand bias")
         if x_axis == 'k':
             plt.xlabel("K")
@@ -173,7 +247,7 @@ class Analysis:
             plt.xlabel("Bins")
         plt.plot(df[x_axis], df['bias_mean'], color='b', label='Mean value of strand bias')
         plt.plot(df[x_axis], df['bias_median'], color='g', label='Median value of strand bias')
-        plt.plot(df[x_axis], df['bias_modus'], color='r', label='Mode value of strand bias')
+        #plt.plot(df[x_axis], df['bias_modus'], color='r', label='Mode value of strand bias')
 
         plt.legend()
         fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_{1}.png'.format(name, k)))
@@ -184,13 +258,17 @@ class Analysis:
         filename = self.filename
         bias_mean = df['strand_bias_%'].mean().round(2)
         bias_median = df['strand_bias_%'].median().round(2)
-        bias_modus = df['strand_bias_%'].mode().iloc[0]
+        bias_modus = df['strand_bias_%'].mode().iloc[0].round(2)
         percentile_5 = round(df['strand_bias_%'].quantile(0.05), 2)
         percentile_95 = round(df['strand_bias_%'].quantile(0.95), 2)
 
         import csv
         stat = [filename, k, batch, bias_mean, bias_median, bias_modus, percentile_5, percentile_95]
-        with open(self.sb_analysis_file, 'a', newline='') as f:
+        if batch is None:
+            sb = self.sb_analysis_file
+        else:
+            sb = self.np_sb_analysis_file
+        with open(sb, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(stat)
 
@@ -221,7 +299,6 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     mean = statistics.mean(values)
     stdev = statistics.stdev(values)
     confidence_interval = z * stdev / sqrt(len(values))
-    print(mean, stdev)
     left = x - horizontal_line_width / 2
     top = mean - confidence_interval
     right = x + horizontal_line_width / 2
