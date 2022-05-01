@@ -3,24 +3,14 @@ import os
 import sys
 import argparse
 
-from Bio import SeqIO
-from Bio.SeqIO.FastaIO import SimpleFastaParser
-import pandas as pd
-
 import jellyfish
 import nanopore
 import utils
 import analysis
 
-COMPLEMENTS_DICT = {'A': 'T',
-                    'C': 'G',
-                    'G': 'C',
-                    'T': 'A'}
 
 __version__ = '0.1.0'
 
-JELLYFISH_TO_DF_FORMAT = "output_{0}_{1}.fasta"
-JELLYFISH_TO_DF_BATCHES = "output_{0}_nanopore_{1}_batch_{2}.fasta"
 
 def arg_parser():
     parser = argparse.ArgumentParser()
@@ -98,6 +88,7 @@ def args_checker(args):
         os.mkdir(args.output[0])
 
     a_args.set_output(args.output[0])
+    a_args.keep_computations = args.keep_computations
 
     if args.mer[0] < 3 and args.mer[0] != 0:
         sys.exit("MER must be a positive number higher or equal to 3")
@@ -137,8 +128,6 @@ def args_checker(args):
         if args.bin_interval is not None:
             nano.bin_interval = args.bin_interval[0]
 
-
-
     return a_args, jf, nano, args.input
 
 
@@ -155,19 +144,19 @@ def main():
                 print("running computation and analysis for K=" + str(k))
                 jf_output = jf.run_jellyfish(file, k)
 
-                if nano is not None and check_if_nanopore(file):
-                    print('would analyze nanopore')
+                if nano is not None and (k == 5) and utils.check_if_nanopore(file):
+                    print('running nanopore analysis...')
                     nano.nanopore_analysis(file)
             else:
                 print("jellyfish disabled, running only analysis...")
                 jf_output = file
-            df = jellyfish_to_dataframe(jf_output, k, sb_analysis=sb_analysis, output="out/sbat/dump", analysis=analysis)
+            df = analysis.jellyfish_to_dataframe(jf_output, k)  # convert jellyfish results to DataFrame
             dfs.append(df)
-            analysis.plot_kmers_vs_bias(df, k)
+            if df is not None:
+                analysis.plot_kmers_vs_bias(df, k)
         analysis.draw_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
         analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
-        analysis.plot_cg_from_dataframe()
-
+        analysis.plot_cg_from_dataframe(dfs)
 
 
 def version():
