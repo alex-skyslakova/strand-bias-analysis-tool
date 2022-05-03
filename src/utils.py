@@ -1,13 +1,10 @@
 import itertools
-import math
 import os
 import re
-from locale import atoi, atof
 
 import dateutil.rrule as rrule
 from Bio import SeqIO
 from Bio.SeqIO.FastaIO import SimpleFastaParser
-from dateutil.parser import parse as dparse
 
 COMPLEMENTS_DICT = {'A': 'T',
                     'C': 'G',
@@ -21,9 +18,10 @@ def get_filename(name):
     return os.path.basename(name).split('.')[0]
 
 
-def to_int(data):
-    data = data.apply(lambda x: x.astype(int) if x is not None else math.nan)
-    return data
+# TODO not needed?
+# def to_int(data):
+#     data = data.apply(lambda x: x.astype(int) if x is not None else math.nan)
+#     return data
 
 
 def unique_path(f):
@@ -47,11 +45,13 @@ def is_or_create_dir(dir):
     if not os.path.isdir(dir):
         os.makedirs(dir)
 
+
 def get_bin_number(text):
     """
     Get appendix from file number representing nanopore bin.
     """
     return list(map(int, re.findall(r'\d+', text)))[-1]
+
 
 def get_n_percent(df, n, tail=False):
     """
@@ -173,16 +173,9 @@ def parse_fasta(path):
     with open(path) as fasta_file:
         c = 0
         for count, sequence in SimpleFastaParser(fasta_file):
-            # print(count, sequence)
             if sequence == get_reverse_complement(sequence):
                 continue
             c += 1
             seq.append(sequence)
             seq_count.append(float(count))
     return seq, seq_count
-
-d = [ 'out/sbat/dump/nanopore_GM24385_3_batch_9.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_17.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_21.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_22.fasta',
-      'out/sbat/dump/nanopore_GM24385_3_batch_43.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_14.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_15.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_16.fasta',
-      'out/sbat/dump/nanopore_GM24385_3_batch_17.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_11.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_19.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_20.fasta',
-      'out/sbat/dump/nanopore_GM24385_3_batch_21.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_02.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_24.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_25.fasta',
-      'out/sbat/dump/nanopore_GM24385_3_batch_26.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_27.fasta', 'out/sbat/dump/nanopore_GM24385_3_batch_28.fasta',]
