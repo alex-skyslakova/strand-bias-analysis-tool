@@ -285,48 +285,50 @@ class Analysis:
         plt.savefig(fig_name, dpi=400)
         plt.close()
 
-def track_most_common_kmer_change(dfs, k):
-    fwds, bwds = utils.split_forwards_and_backwards(k)
-    fwds = fwds.sort()
-    kmer_changes = pd.DataFrame(
-        data={'seq': fwds},
-        columns=['seq'])
-    for batch, df in enumerate(dfs):
-        df = df.sort_values(by=['seq'])[['seq', 'strand_bias_%']]
-        kmer_changes = kmer_changes.merge(df, how='right', on='seq', suffixes=("", "_batch_{}".format(batch)))
+#
+# def track_most_common_kmer_change(dfs, k):
+#     fwds, bwds = utils.split_forwards_and_backwards(k)
+#     fwds = fwds.sort()
+#     kmer_changes = pd.DataFrame(
+#         data={'seq': fwds},
+#         columns=['seq'])
+#     for batch, df in enumerate(dfs):
+#         df = df.sort_values(by=['seq'])[['seq', 'strand_bias_%']]
+#         kmer_changes = kmer_changes.merge(df, how='right', on='seq', suffixes=("", "_batch_{}".format(batch)))
+#
+#     df.rename({'strand_bias_%': 'strand_bias_%_batch_0'}, inplace=True)
+#     return kmer_changes
+#
+#
+# a = pd.DataFrame(
+#     data={'seq': ['a', 'c', 'g', 't']},
+#           columns=['seq'])
+# b = pd.DataFrame(
+#     data={'seq': ['a', 'c', 'g', 't'], 'sb': [8,2,3,4]},
+#           columns=['seq', 'sb'])
+#
+# c = pd.DataFrame(
+#     data={'seq': ['a', 'c', 'g', 't'], 'sb': [8,25,3,4]},
+#           columns=['seq', 'sb'])
+#
+#
+# dfs = []
+# for i in range(0, 24):
+#     df = pd.read_csv('D:\Alex\School\sbapr\strand-bias-analysis-tool\out\sbat\dump\df_output_6_nanopore_41ec7eae4495de82ef09c416dbd6d5c983ff8c4e_batch_{}_1.csv'.format(i))
+#     dfs.append(df)
+# #df7 = pd.read_csv('D:\Alex\School\sbapr\strand-bias-analysis-tool\out\sbat\dump\df_output_5_nanopore_41ec7eae4495de82ef09c416dbd6d5c983ff8c4e_batch_2.csv')
+#
+#
+# r = track_most_common_kmer_change(dfs, 5)
+# r['diff'] = abs(r['strand_bias_%_batch_23'] - r['strand_bias_%'])
+#
+# r.sort_values(by=['diff'], ascending=False, inplace=True)
+#
+# print(r)
+# filtered = r[['seq', 'diff', 'strand_bias_%_batch_23', 'strand_bias_%']]
+# print(filtered)
+# filtered.to_csv("filtered")
 
-    df.rename({'strand_bias_%': 'strand_bias_%_batch_0'}, inplace=True)
-    return kmer_changes
-
-
-a = pd.DataFrame(
-    data={'seq': ['a', 'c', 'g', 't']},
-          columns=['seq'])
-b = pd.DataFrame(
-    data={'seq': ['a', 'c', 'g', 't'], 'sb': [8,2,3,4]},
-          columns=['seq', 'sb'])
-
-c = pd.DataFrame(
-    data={'seq': ['a', 'c', 'g', 't'], 'sb': [8,25,3,4]},
-          columns=['seq', 'sb'])
-
-
-dfs = []
-for i in range(0, 24):
-    df = pd.read_csv('D:\Alex\School\sbapr\strand-bias-analysis-tool\out\sbat\dump\df_output_6_nanopore_41ec7eae4495de82ef09c416dbd6d5c983ff8c4e_batch_{}_1.csv'.format(i))
-    dfs.append(df)
-#df7 = pd.read_csv('D:\Alex\School\sbapr\strand-bias-analysis-tool\out\sbat\dump\df_output_5_nanopore_41ec7eae4495de82ef09c416dbd6d5c983ff8c4e_batch_2.csv')
-
-
-r = track_most_common_kmer_change(dfs, 5)
-r['diff'] = abs(r['strand_bias_%_batch_23'] - r['strand_bias_%'])
-
-r.sort_values(by=['diff'], ascending=False, inplace=True)
-
-print(r)
-filtered = r[['seq', 'diff', 'strand_bias_%_batch_23', 'strand_bias_%']]
-print(filtered)
-filtered.to_csv("filtered")
 def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25):
     mean = statistics.mean(values)
     stdev = statistics.stdev(values)
