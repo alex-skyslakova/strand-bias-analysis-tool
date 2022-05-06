@@ -12,18 +12,18 @@ COMPLEMENTS_DICT = {'A': 'T',
                     'G': 'C',
                     'T': 'A'}
 
-UNITS = { "K": 10**3, "M": 10**6, "G": 10**9, "T": 10**12}
-
-def get_filename(name):
-    if name is None:
-        return name
-    return os.path.basename(name).split('.')[0]
+UNITS = {"K": 10 ** 3, "M": 10 ** 6, "G": 10 ** 9, "T": 10 ** 12}
 
 
-# TODO not needed?
-# def to_int(data):
-#     data = data.apply(lambda x: x.astype(int) if x is not None else math.nan)
-#     return data
+def get_filename(filepath):
+    """
+    Function to convert path to file into a filename without filetype suffix.
+    :param filepath: path to be transformed
+    :return: name of the file
+    """
+    if filepath is None:
+        return filepath
+    return os.path.basename(filepath).split('.')[0]
 
 
 def unique_path(f):
@@ -115,7 +115,7 @@ def parse_iso_size(size):
     """
     _, number, unit = re.split(r'(\d+)', size)
     if unit in UNITS.keys():
-        return int(float(number)*UNITS[unit])
+        return int(float(number) * UNITS[unit])
     else:
         sys.exit("unsupported suffix: {}, use one of K M G T".format(unit))
 
@@ -197,6 +197,12 @@ def parse_fasta(path):
 
 
 def select_more_frequent(row, seq=False):
+    """
+    Fuction to return count (sequence if seq=True) of sequence or its rev. complement based on which is more frequent.
+    :param row: one row of DataFrame with SB statistics
+    :param seq: if true, sequence is returned instead of its count
+    :return: count/sequence of more frequent out of seq and its rev. compl.
+    """
     if row["seq_count"] > row["rev_complement_count"]:
         if seq:
             return row["seq"]
