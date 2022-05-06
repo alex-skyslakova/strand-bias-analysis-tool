@@ -194,3 +194,14 @@ def parse_fasta(path):
             seq.append(sequence)
             seq_count.append(float(count))
     return seq, seq_count
+
+
+def select_more_frequent(row, seq=False):
+    if row["seq_count"] > row["rev_complement_count"]:
+        if seq:
+            return row["seq"]
+        return row["seq_count"]
+    else:
+        if seq:
+            return row["rev_complement"]
+        return row["rev_complement_count"]

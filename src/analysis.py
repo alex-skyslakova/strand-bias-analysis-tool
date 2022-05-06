@@ -264,7 +264,7 @@ class Analysis:
             writer.writerow(stat)
 
     def plot_kmers_vs_bias(self, df, k):
-        df["more_freq_count"] = df.apply(lambda row: select_more_frequent(row), axis=1)
+        df["more_freq_count"] = df.apply(lambda row: utils.select_more_frequent(row), axis=1)
         df = df.sort_values(by=['more_freq_count'], ascending=False)
         kmers = df["seq"]
         bias = df["strand_bias_%"]
