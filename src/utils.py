@@ -1,6 +1,7 @@
 import itertools
 import os
 import re
+import sys
 
 import dateutil.rrule as rrule
 from Bio import SeqIO
@@ -11,6 +12,7 @@ COMPLEMENTS_DICT = {'A': 'T',
                     'G': 'C',
                     'T': 'A'}
 
+UNITS = { "K": 10**3, "M": 10**6, "G": 10**9, "T": 10**12}
 
 def get_filename(name):
     if name is None:
@@ -103,6 +105,19 @@ def get_strand_bias_percentage(ratio):
     :return: deviation from 1 in %
     """
     return 100 - (ratio * 100)
+
+
+def parse_iso_size(size):
+    """
+    Function to split number in shortened format (i.e. 500K) into classic representation (500000
+    :param size: number to be converted
+    :return: long representation of number
+    """
+    _, number, unit = re.split(r'(\d+)', size)
+    if unit in UNITS.keys():
+        return int(float(number)*UNITS[unit])
+    else:
+        sys.exit("unsupported suffix: {}, use one of K M G T".format(unit))
 
 
 def gc_percentage(string):

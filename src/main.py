@@ -58,6 +58,11 @@ def arg_parser():
                         type=int,
                         default=[1],
                         help='number of hours that would fall into one bin when analysing nanopore')
+    parser.add_argument('-w', '--whisker',
+                        nargs=1,
+                        type=int,
+                        default=[5],
+                        help='number of % taken into account when comparing highest N% and lowest N% of SB levels')
     parser.add_argument('-c', '--keep-computations',
                         action="store_true",
                         default=False,
@@ -88,7 +93,10 @@ def args_checker(args):
 
     a_args.set_output(args.output[0])
     a_args.keep_computations = args.keep_computations
-
+    if args.whisker[0] <= 0 or args.whisker[0] > 100:
+        sys.exit("whisker must be number from interval (0, 100]")
+    else:
+        a_args.whisker = args.whisker[0]
     if args.mer[0] < 3 and args.mer[0] != 0:
         sys.exit("MER must be a positive number higher or equal to 3")
 
@@ -104,8 +112,8 @@ def args_checker(args):
         else:
             a_args.threads = args.threads[0]
             jf.threads = args.threads[0]
-
-        # TODO parse hash size
+            print(args.size[0])
+        jf.hash_size = utils.parse_iso_size(args.size[0])
 
     if args.mer[0] == 0:
         # default boundaries to iterate upon

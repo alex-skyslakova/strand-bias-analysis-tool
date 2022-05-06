@@ -5,7 +5,7 @@ import utils
 
 
 class Jellyfish:
-    def __init__(self, threads=1, hash_size="500M", output_dir=''):
+    def __init__(self, threads=1, hash_size="100M", output_dir=''):
         self.threads = threads
         self.hash_size = hash_size
         self.jf_dir = self.set_outdir(output_dir)
