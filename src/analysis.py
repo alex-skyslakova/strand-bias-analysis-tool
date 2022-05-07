@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 import numpy as np
@@ -39,7 +40,8 @@ class Analysis:
         self.filename = utils.get_filename(file)
         self.out_dir = os.path.join(output_dir, 'sbat')
         self.fig_dir = os.path.join(output_dir, 'sbat', 'figures')
-        self.dump_dir = os.path.join(output_dir, 'sbat', 'dump') # output files, mer.jf, dfs, removed in the end unless --kep-computations
+        # output files, dfs; will be removed in the end unless --kep-computations
+        self.dump_dir = os.path.join(output_dir, 'sbat', 'dump')
         self.sb_analysis_file = None
         self.np_sb_analysis_file = None
         self.whisker = whisker
@@ -63,6 +65,7 @@ class Analysis:
         Function to create dataframe with statistics based on Jellyfish output
         :param path: path to Jellyfish output
         :param k: length of kmers in given file
+        :param batch: bin number
         """
         seq, seq_count = utils.parse_fasta(path)
         if len(seq) == 0:
@@ -91,24 +94,22 @@ class Analysis:
         jellyfish_data = jellyfish_data.reset_index().join(jellyfish_forward, on="index", rsuffix="_", lsuffix="").drop(
             columns=["seq_", "index"], axis=1).dropna()
 
-        if len(jellyfish_data.index) == 0:
-            return None
-
-        jellyfish_data.rename(columns={"seq_count_": "rev_complement_count"}, inplace=True)
-
-        # calculate ratio of forward and backward k-mer frequencies
-        jellyfish_data["ratio"] = jellyfish_data.apply(
-            lambda row: utils.get_ratio(row["seq_count"], row["rev_complement_count"]), axis=1)
-        # calculate deviation from 100% accuracy
-        jellyfish_data["strand_bias_%"] = jellyfish_data.apply(lambda row: utils.get_strand_bias_percentage(row["ratio"]),
-                                                               axis=1)
-        # calculate CG content percentage
-        jellyfish_data["CG_%"] = jellyfish_data.apply(lambda row: utils.gc_percentage(row["seq"]), axis=1)
-        # sort data by bias in descending order
-        jellyfish_data = jellyfish_data.sort_values(by=["strand_bias_%"], ascending=False)
+        if len(jellyfish_data.index) != 0:
+            jellyfish_data.rename(columns={"seq_count_": "rev_complement_count"}, inplace=True)
+            # calculate ratio of forward and backward k-mer frequencies
+            jellyfish_data["ratio"] = jellyfish_data.apply(
+                lambda row: utils.get_ratio(row["seq_count"], row["rev_complement_count"]), axis=1)
+            # calculate deviation from 100% accuracy
+            jellyfish_data["strand_bias_%"] = jellyfish_data.apply(
+                lambda row: utils.get_strand_bias_percentage(row["ratio"]),
+                axis=1)
+            # calculate CG content percentage
+            jellyfish_data["CG_%"] = jellyfish_data.apply(lambda row: utils.gc_percentage(row["seq"]), axis=1)
+            # sort data by bias in descending order
+            jellyfish_data = jellyfish_data.sort_values(by=["strand_bias_%"], ascending=False)
 
         filename = utils.unique_path("df_{}.csv".format(os.path.basename(path.split(".")[0])))
-        #if sb_analysis:
+        # if sb_analysis:
         self.fill_sb_analysis_from_df(jellyfish_data, k, batch)
         if self.keep_computations:
             filename = utils.unique_path(os.path.join(self.dump_dir, filename))
@@ -255,7 +256,6 @@ class Analysis:
         plt.plot(df[x_axis], df['bias_median'], '-go', label='Median value of strand bias')
 
         plt.legend()
-        fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_{1}.png'.format(name, k)))
         plt.savefig(fig_name)
         plt.close()
 
