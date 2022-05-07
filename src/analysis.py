@@ -226,24 +226,33 @@ class Analysis:
         plt.savefig(fig_name)
         plt.close()
 
-    def draw_basic_stats_lineplot(self, name, statfile, k=None, x_axis='k'):
+    def draw_basic_stats_lineplot(self, name, statfile, k=None, nanopore=False):
         df = pd.read_csv(statfile)
-
-        # if k is set and x_axis=batch, plotting nanopore split data
         if k is not None:
-            df = df.loc[df['k'] == k]
+            df = df.loc[df['k'] == k].dropna()
+
+        if df.shape[0] <= 1:
+            # no point in drawing this plot for 0 or 1 record
+            return
 
         # Plot a simple line chart
         plt.figure()
-        plt.title('Mean and Median of Strand Bias in Nanopore Data')
-        plt.ylabel("Strand bias")
-        if x_axis == 'k':
-            plt.xlabel("K")
-        else:
-            plt.xlabel("Bins")
-        plt.plot(df[x_axis], df['bias_mean'], color='b', label='Mean value of strand bias')
-        plt.plot(df[x_axis], df['bias_median'], color='g', label='Median value of strand bias')
-        #plt.plot(df[x_axis], df['bias_modus'], color='r', label='Mode value of strand bias')
+        plt.ylabel("Strand bias", fontsize=14)
+        if nanopore:  # plotting SB x Bins for specific size of K (nanopore analysis)
+            x_axis = "batch"
+            plt.title('Mean and Median of Strand Bias for K={}'.format(k))
+            plt.xlabel("Bins", fontsize=14)
+            fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_k{1}.png'.format(name, k)))
+            plt.xticks(df[x_axis], fontsize=12)
+        else:  # plotting SB x sizes of K (primary analysis)
+            x_axis = "k"
+            plt.title('Mean and Median of Strand Bias')
+            plt.xlabel("K", fontsize=14)
+            fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}.png'.format(name)))
+            plt.xticks(df[x_axis], fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.plot(df[x_axis], df['bias_mean'], '-bo', label='Mean value of strand bias')
+        plt.plot(df[x_axis], df['bias_median'], '-go', label='Median value of strand bias')
 
         plt.legend()
         fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_{1}.png'.format(name, k)))
@@ -251,15 +260,17 @@ class Analysis:
         plt.close()
 
     def fill_sb_analysis_from_df(self, df, k, batch):
-        filename = self.filename
-        bias_mean = df['strand_bias_%'].mean().round(2)
-        bias_median = df['strand_bias_%'].median().round(2)
-        bias_modus = df['strand_bias_%'].mode().iloc[0].round(2)
-        percentile_5 = round(df['strand_bias_%'].quantile(0.05), 2)
-        percentile_95 = round(df['strand_bias_%'].quantile(0.95), 2)
+        if df is None or df.empty:
+            bias_mean, bias_median, bias_modus, percentile_5, percentile_95 = [math.nan for _ in range(5)]
+        else:
+            bias_mean = df['strand_bias_%'].mean().round(2)
+            bias_median = df['strand_bias_%'].median().round(2)
+            bias_modus = df['strand_bias_%'].mode().iloc[0].round(2)
+            percentile_5 = round(df['strand_bias_%'].quantile(0.05), 2)
+            percentile_95 = round(df['strand_bias_%'].quantile(0.95), 2)
 
         import csv
-        stat = [filename, k, batch, bias_mean, bias_median, bias_modus, percentile_5, percentile_95]
+        stat = [self.filename, k, batch, bias_mean, bias_median, bias_modus, percentile_5, percentile_95]
         if batch is None:
             sb = self.sb_analysis_file
         else:
@@ -285,54 +296,12 @@ class Analysis:
         else:
             plt.xticks(range(len(df["seq"])), kmers, rotation=90, fontsize=3.5)
 
-        fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_kmer_vs_bias_{0}_k{1}.png'.format(self.filename, k)))
+        fig_name = utils.unique_path(
+            os.path.join(self.fig_dir, 'fig_kmer_vs_bias_{0}_k{1}.png'.format(self.filename, k)))
         print(fig_name)
         plt.savefig(fig_name, dpi=400)
         plt.close()
 
-#
-# def track_most_common_kmer_change(dfs, k):
-#     fwds, bwds = utils.split_forwards_and_backwards(k)
-#     fwds = fwds.sort()
-#     kmer_changes = pd.DataFrame(
-#         data={'seq': fwds},
-#         columns=['seq'])
-#     for batch, df in enumerate(dfs):
-#         df = df.sort_values(by=['seq'])[['seq', 'strand_bias_%']]
-#         kmer_changes = kmer_changes.merge(df, how='right', on='seq', suffixes=("", "_batch_{}".format(batch)))
-#
-#     df.rename({'strand_bias_%': 'strand_bias_%_batch_0'}, inplace=True)
-#     return kmer_changes
-#
-#
-# a = pd.DataFrame(
-#     data={'seq': ['a', 'c', 'g', 't']},
-#           columns=['seq'])
-# b = pd.DataFrame(
-#     data={'seq': ['a', 'c', 'g', 't'], 'sb': [8,2,3,4]},
-#           columns=['seq', 'sb'])
-#
-# c = pd.DataFrame(
-#     data={'seq': ['a', 'c', 'g', 't'], 'sb': [8,25,3,4]},
-#           columns=['seq', 'sb'])
-#
-#
-# dfs = []
-# for i in range(0, 24):
-#     df = pd.read_csv('D:\Alex\School\sbapr\strand-bias-analysis-tool\out\sbat\dump\df_output_6_nanopore_41ec7eae4495de82ef09c416dbd6d5c983ff8c4e_batch_{}_1.csv'.format(i))
-#     dfs.append(df)
-# #df7 = pd.read_csv('D:\Alex\School\sbapr\strand-bias-analysis-tool\out\sbat\dump\df_output_5_nanopore_41ec7eae4495de82ef09c416dbd6d5c983ff8c4e_batch_2.csv')
-#
-#
-# r = track_most_common_kmer_change(dfs, 5)
-# r['diff'] = abs(r['strand_bias_%_batch_23'] - r['strand_bias_%'])
-#
-# r.sort_values(by=['diff'], ascending=False, inplace=True)
-#
-# print(r)
-# filtered = r[['seq', 'diff', 'strand_bias_%_batch_23', 'strand_bias_%']]
-# print(filtered)
-# filtered.to_csv("filtered")
 
 def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25):
     mean = statistics.mean(values)
@@ -347,14 +316,5 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     plt.plot([left, right], [bottom, bottom], color=color)
     plt.plot(x, mean, 'o', color='#f44336')
 
-    return mean, confidence_interval
 
-def select_more_frequent(row, seq=False):
-    if row["seq_count"] > row["rev_complement_count"]:
-        if seq:
-            return row["seq"]
-        return row["seq_count"]
-    else:
-        if seq:
-            return row["rev_complement"]
-        return row["rev_complement_count"]
+    return mean, confidence_interval
