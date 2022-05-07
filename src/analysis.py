@@ -139,40 +139,45 @@ class Analysis:
         lower_cg = []
         lower_biases = []
         kmers = []
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 15))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 22))
 
         for i, df in enumerate(dfs):
             if df is None or len(utils.get_n_percent(df, self.whisker).index) == 0:
+                # skip DF it's None or has too little values for retrieving N percent
                 continue
             kmers.append(i + self.start_k)
-            df_head = utils.get_n_percent(df, self.whisker)
 
+            df_head = utils.get_n_percent(df, self.whisker)  # get N percent with the highest bias
             upper_cg.append(df_head["CG_%"].mean().round(2))
             upper_biases.append(df_head["strand_bias_%"].mean().round(2))
 
-            df_tail = utils.get_n_percent(df, self.whisker, True)
+            df_tail = utils.get_n_percent(df, self.whisker, True)  # get N percent with the lowest bias
             lower_cg.append(None if len(df_head.index) == 0 else df_tail["CG_%"].mean().round(2))
             lower_biases.append(None if len(df_head.index) == 0 else df_tail["strand_bias_%"].mean().round(2))
 
+        if not kmers:  # no dataframe is big enough to provide data
+            return
+
         x_label = 'Mean CG content [%]'
         y_label = 'Mean Strand bias [%]'
-        for ax in [ax1, ax2, ax3]:
-            ax.set_xlabel(x_label)
-            ax.set_ylabel(y_label)
 
-        ax1.set_title("CG content vs Strand Bias in top " + str(self.whisker) + "% of SB score")
+        for ax in [ax1, ax2, ax3]:
+            ax.set_xlabel(x_label, fontsize=18)
+            ax.set_ylabel(y_label, fontsize=18)
+            ax.xaxis.set_tick_params(labelsize=18)
+            ax.yaxis.set_tick_params(labelsize=18)
+
+        ax1.set_title("CG Content vs Strand Bias in Top " + str(self.whisker) + "% of SB Score", fontsize=20)
         ax1.scatter(upper_cg, upper_biases, marker="^", color="red")
 
-        ax2.set_title("CG content vs Strand Bias in bottom " + str(self.whisker) + "% of SB score")
+        ax2.set_title("CG content vs Strand Bias in Bottom " + str(self.whisker) + "% of SB Score", fontsize=20)
         ax2.scatter(lower_cg, lower_biases, marker="v", color="green")
 
-        ax3.set_title("CG content vs Strand Bias in bottom and top " + str(self.whisker) + "% of SB score")
+        ax3.set_title("CG content vs Strand Bias in Bottom and Top " + str(self.whisker) + "% of SB Score", fontsize=20)
         ax3.scatter(lower_cg, lower_biases, marker="v", color="green")
         ax3.scatter(upper_cg, upper_biases, marker="^", color="red")
 
         for i, txt in enumerate(kmers):
-            if dfs[i] is None:
-                continue
             ax1.annotate(" " + str(txt), (upper_cg[i], upper_biases[i]), fontsize=15)
             ax2.annotate(" " + str(txt), (lower_cg[i], lower_biases[i]), fontsize=15)
         fig_path = os.path.join(self.fig_dir, "fig_cg_{0}%_{1}.png".format(str(self.whisker), self.filename))
