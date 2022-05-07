@@ -140,20 +140,21 @@ def args_checker(args):
 
 def main():
     analysis, jf, nano, input_files = arg_parser()
-
     for file in input_files:
         analysis.set_file(file)
         analysis.init_analysis()
         print("input: " + file)
         dfs = []
+        run_nano = nano is not None and utils.check_if_nanopore(file)
         for k in range(analysis.start_k, analysis.end_k + 1):
             if jf is not None:
                 print("running computation and analysis for K=" + str(k))
                 jf_output = jf.run_jellyfish(file, k)
 
-                if nano is not None and (k == 5) and utils.check_if_nanopore(file):
+                if run_nano:
                     print('running nanopore analysis...')
                     nano.nanopore_analysis(file)
+                    run_nano = False  # run analysis only once for each input file
             else:
                 print("jellyfish disabled, running only analysis...")
                 jf_output = file
@@ -164,7 +165,10 @@ def main():
         analysis.draw_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
         analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
         analysis.plot_cg_from_dataframe(dfs)
-
+    if not analysis.keep_computations:
+        shutil.rmtree(analysis.dump_dir)
+        if jf is not None:
+            shutil.rmtree(jf.jf_dir)
 
 def version():
     """

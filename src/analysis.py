@@ -185,24 +185,27 @@ class Analysis:
         fig_path = utils.unique_path(fig_path)
         plt.savefig(fig_path)
 
-    def plot_conf_interval_graph(self, dataframes, k='', start_index=0): # TODO fix args
-        if k is None or k=="":
-            x = [x + start_index for x in range(len(dataframes))]
+    def plot_conf_interval_graph(self, dataframes, k='', start_index=0, nanopore=False):  # TODO fix args
+        if not nanopore:
+            x = [x for x in range(min(self.start_k, 5), max(self.end_k + 1, 11))]
         else:
             x = [x for x in range(len(dataframes))]
+
         plt.figure(figsize=(15, 7))
-        plt.xticks(x, x)
-        if k is None or k=="":
-            plt.title('Confidence Interval among Bins')
+        plt.xticks(x, x, fontsize=12)
+        plt.yticks(fontsize=12)
+
+        if not nanopore:
+            plt.title('Confidence Interval among Different Sizes of K', fontsize=18)
         else:
-            plt.title('Confidence Interval for K={}'.format(k))
+            plt.title('Confidence Interval among Bins for K={}'.format(k), fontsize=18)
         y = []
 
-        plt.ylabel("Strand bias [%]")
-        if k is None or k == '':
-            plt.xlabel("K")
+        plt.ylabel("Strand bias [%]", fontsize=18)
+        if not nanopore:
+            plt.xlabel("K", fontsize=18)
         else:
-            plt.xlabel("Bins")
+            plt.xlabel("Bins", fontsize=18)
 
         for index, df in enumerate(dataframes):
             if df is None or df.shape[0] < 3:
@@ -212,18 +215,20 @@ class Analysis:
                 index = start_index + index
 
             mean, ci = plot_confidence_interval(index, df['strand_bias_%'])
-            y.append(mean)
+            y.append(round(mean, 3))
+
+        plt.xlim(x[0] - 0.5, x[-1] + 0.5)
+        plt.ylim(0, min(100, max(y) + 5))
 
         if len(x) > 1 and len(y) > 1:
             try:
                 z = np.polyfit(x, y, 3)  # polynomial fit
                 p = np.poly1d(z)
-                plt.plot(x, p(x), 'r--')
+                plt.plot(x, p(x), 'r--', label="polynomial fit of 3rd degree")
+                plt.legend()
             except Exception as e:
-                print("Error occurred during fitting linear regression: {}\nskipping...".format(e))
-        print(k)
+                print("Error occurred during polynomial fitting: {}\nskipping...".format(e))
         fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_ci_{0}_{1}.png'.format(self.filename, k)))
-        print(fig_name)
         plt.savefig(fig_name)
         plt.close()
 

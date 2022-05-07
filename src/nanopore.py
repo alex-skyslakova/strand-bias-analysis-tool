@@ -44,13 +44,17 @@ class Nanopore:
         for k in range(self.common.start_k, self.common.end_k + 1):
             batch_dfs = []
             for index, file in enumerate(batch_files):
+                if file is None:
+                    batch_dfs.append(file)
+                    continue
                 df_file = self.jf.run_jellyfish(file, k)
                 #df_file = os.path.join("nanopore/subsamples_50M/", main.JELLYFISH_TO_DF_BATCHES.format(k, utils.get_filename(input), index))
                 current_df = self.common.jellyfish_to_dataframe(df_file, k, batch=index)
                 dataframe = pd.concat([dataframe, current_df])
                 batch_dfs.append(current_df)
-            self.common.plot_conf_interval_graph(batch_dfs, k, start_index=self.common.start_k)
-            self.common.draw_basic_stats_lineplot(utils.get_filename(input), self.common.np_sb_analysis_file, k, x_axis="batch")
+            self.common.plot_conf_interval_graph(batch_dfs, k, start_index=self.common.start_k, nanopore=True)
+            self.common.draw_basic_stats_lineplot(
+                utils.get_filename(input), self.common.np_sb_analysis_file, k, nanopore=True)
 
     # Nanopore bias comparation per hours
 
@@ -58,7 +62,7 @@ class Nanopore:
         subsampling = self.subs_reads != math.inf or self.subs_bases != math.inf
         file_type = 'fastq' if fastq.split('.')[-1] == 'fastq' else 'fasta'
 
-        batchfiles = []
+
         start = utc.localize(datetime.datetime.now())
         end = utc.localize(datetime.datetime(1970, 1, 1, 0, 0, 0))
 
@@ -71,6 +75,7 @@ class Nanopore:
         batches = utils.hours_aligned(start, end, interval)
         reads_per_batch = [0 for _ in range(len(batches))]
         bases_per_batch = [0 for _ in range(len(batches))]
+        batch_files = ["" for _ in range(len(batches))]
 
         for record in SeqIO.parse(fastq, file_type):
             record_time = dparse([i for i in record.description.split() if i.startswith('start_time')][0].split('=')[1])
@@ -81,16 +86,17 @@ class Nanopore:
             reads_per_batch[batch] += 1
             bases_per_batch[batch] += len(record.seq)
             filename = os.path.join(self.common.dump_dir, NANOPORE_BIN_FORMAT.format(utils.get_filename(fastq), batch))
-            if filename not in batchfiles:
-                batchfiles.append(filename)
+            batch_files[batch] = filename
+            #if filename not in batchfiles:
+            #    batchfiles.append(filename)
             f = open(filename, 'a')
             f.write(record.format('fasta'))
             f.close()
 
         self.plot_bin_distribution(reads_per_batch, utils.get_filename(fastq), "Reads")
         self.plot_bin_distribution(bases_per_batch, utils.get_filename(fastq), "Nucleotides")
-        batchfiles.sort(key=utils.get_bin_number)
-        return batchfiles
+        #batch_files.sort(key=utils.get_bin_number)
+        return [str(i) or None for i in batch_files] #batch_files
 
     def plot_bin_distribution(self, counts_per_bin, filename, what_of="Reads"):
         bins = [x for x in range(len(counts_per_bin))]
