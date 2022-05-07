@@ -1,4 +1,6 @@
+import datetime
 import os
+import shutil
 import sys
 import argparse
 
@@ -39,6 +41,7 @@ def arg_parser():
                              'in 5-10 range. MER must be >= 3 for analysis')
     parser.add_argument('-s', '--size',
                         nargs=1,
+                        default="100M",
                         help='size of hash table for jellyfish')
     parser.add_argument('-t', '--threads',
                         nargs=1,
@@ -75,6 +78,7 @@ def arg_parser():
     analysis_args = args_checker(args)
     return analysis_args
 
+
 def args_checker(args):
     jf = None
     nano = None
@@ -107,8 +111,7 @@ def args_checker(args):
         jf = jellyfish.Jellyfish()
         jf.set_outdir(args.output[0])
         if args.threads[0] < 1:
-            print("number of threads must be a positive integer")
-            return 1
+            sys.exit("number of threads must be a positive integer")
         else:
             a_args.threads = args.threads[0]
             jf.threads = args.threads[0]
@@ -170,6 +173,7 @@ def main():
         if jf is not None:
             shutil.rmtree(jf.jf_dir)
 
+
 def version():
     """
     Prints current version of the tool.
@@ -179,5 +183,3 @@ def version():
 
 if __name__ == '__main__':
     main()
-    #nanopore_analysis("nanopore/subsamples_50M/nanopore_GM24385_11.fasta", "nanopore/subsamples_50M/", end_k=8)
-#analysis.draw_basic_stats_lineplot("nanopore/subsamples_50M", "subsamples_50M", "nanopore\subsamples_50M\sb_analysis_nanopore_GM24385_11.csv", k=None, x_axis="batch")

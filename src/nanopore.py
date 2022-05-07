@@ -48,7 +48,6 @@ class Nanopore:
                     batch_dfs.append(file)
                     continue
                 df_file = self.jf.run_jellyfish(file, k)
-                #df_file = os.path.join("nanopore/subsamples_50M/", main.JELLYFISH_TO_DF_BATCHES.format(k, utils.get_filename(input), index))
                 current_df = self.common.jellyfish_to_dataframe(df_file, k, batch=index)
                 dataframe = pd.concat([dataframe, current_df])
                 batch_dfs.append(current_df)
@@ -103,12 +102,13 @@ class Nanopore:
 
         fig, ax = plt.subplots(figsize=(18, 12))
 
-        ax.set_ylabel('{} counts'.format(what_of), size=15)
-        ax.set_title('{} counts per bin'.format(what_of), size=15)
-        ax.set_xlabel('Bins', size=15)
+        ax.set_ylabel('{} counts'.format(what_of), size=20)
+        ax.set_title('{} Counts per Bin'.format(what_of), size=20)
+        ax.set_xlabel('Bins', size=20)
         x = np.arange(len(bins)) * 2
         ax.set_xticks(x)
-        ax.set_xticklabels(bins, size=10)
+        plt.setp(ax.get_yticklabels(), fontsize=15)
+        ax.set_xticklabels(bins, size=15)
         bar_width = 1
         pps = ax.bar(x - bar_width / 2, counts_per_bin, bar_width, label='{} counts'.format(what_of))
         for p in pps:
@@ -117,7 +117,7 @@ class Nanopore:
                         xy=(p.get_x() + p.get_width() / 2, height),
                         xytext=(0, 4),  # 4 points vertical offset
                         textcoords="offset points",
-                        ha='center', va='bottom', rotation=90)
+                        ha='center', va='bottom', rotation=90, fontsize=15)
 
         fig_name = utils.unique_path(os.path.join(self.common.fig_dir, "fig_{}_per_bins_{}.png".format(what_of.lower(), filename)))
         plt.savefig(fig_name)
