@@ -32,7 +32,12 @@ class Nanopore:
     # input = complete name and path
     def nanopore_analysis(self, input):
         batch_files = self.bin_nanopore(input, self.bin_interval)
-        # batch_files = ["nanopore/subsamples_50M/nanopore_nanopore_GM24385_11_batch_" + str(i) + ".fasta" for i in range(49)]
+        #batch_files_ = ["out/sbat/dump/nanopore_{}_batch_".format(utils.get_filename(input)) + str(i) + ".fasta" for i in range(71)]
+        # batch_files = []
+        # for i in batch_files_:
+        #     if os.path.isfile(i):
+        #         batch_files.append(i)
+        # print(batch_files)
         if len(batch_files) < 2:
             print("data duration is too short for analysis of hour-long batches, aborting...")
             return
