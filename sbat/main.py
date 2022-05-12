@@ -4,10 +4,10 @@ import shutil
 import sys
 import argparse
 
-import jellyfish
-import nanopore
-import utils
-import analysis
+from jellyfish import *
+from nanopore import *
+from utils import *
+from analysis import *
 
 
 __version__ = '0.1.0'
@@ -29,9 +29,8 @@ def arg_parser():
                         default=False,
                         help='skip k-mer counting. Requires input in fasta file where id=count, seq=k-mer')
     parser.add_argument('-o', '--output',
-                        # action='output',
                         nargs=1,
-                        default=["sbat-out/"],
+                        default=["sbat_out/"],
                         help='output directory')
     parser.add_argument('-m', '--mer',
                         nargs=1,
@@ -82,7 +81,7 @@ def arg_parser():
 def args_checker(args):
     jf = None
     nano = None
-    a_args = analysis.Analysis()
+    a_args = Analysis()
 
     if args.version:
         version()
@@ -108,7 +107,7 @@ def args_checker(args):
         sys.exit("cannot detect nanopore when jellyfish off - nanopore requires jellyfish for analyses")
 
     if not args.no_jellyfish:
-        jf = jellyfish.Jellyfish()
+        jf = Jellyfish()
         jf.set_outdir(args.output[0])
         if args.threads[0] < 1:
             sys.exit("number of threads must be a positive integer")
@@ -116,7 +115,7 @@ def args_checker(args):
             a_args.threads = args.threads[0]
             jf.threads = args.threads[0]
             print(args.size)
-        jf.hash_size = utils.parse_iso_size(args.size)
+        jf.hash_size = parse_iso_size(args.size)
 
     if args.mer[0] == 0:
         # default boundaries to iterate upon
@@ -128,7 +127,7 @@ def args_checker(args):
         a_args.end_k = args.mer[0]
 
     if args.detect_nanopore:
-        nano = nanopore.Nanopore()
+        nano = Nanopore()
         nano.init_common(a_args, jf)
 
         if args.subsample_reads is not None:
@@ -148,7 +147,7 @@ def main():
         analysis.init_analysis()
         print("input: " + file)
         dfs = []
-        run_nano = nano is not None and utils.check_if_nanopore(file)
+        run_nano = nano is not None and check_if_nanopore(file)
         for k in range(analysis.start_k, analysis.end_k + 1):
             if jf is not None:
                 print("running computation and analysis for K=" + str(k))

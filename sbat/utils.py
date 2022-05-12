@@ -104,7 +104,7 @@ def get_strand_bias_percentage(ratio):
     :param ratio: ratio of kmer and its reverse complement
     :return: deviation from 1 in %
     """
-    return 100 - (ratio * 100)
+    return round(100 - (ratio * 100), 4)
 
 
 def parse_iso_size(size):

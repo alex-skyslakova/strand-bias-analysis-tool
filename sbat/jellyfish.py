@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-import utils
+from utils import *
 
 
 class Jellyfish:
@@ -11,8 +11,8 @@ class Jellyfish:
         self.jf_dir = None
 
     def set_outdir(self, output_dir):
-        self.jf_dir = os.path.join(output_dir, 'sbat', 'jellyfish')
-        utils.is_or_create_dir(self.jf_dir)
+        self.jf_dir = os.path.join(output_dir, 'jellyfish')
+        is_or_create_dir(self.jf_dir)
 
     def run_jellyfish(self, input_file, k):
         if input_file is None:
