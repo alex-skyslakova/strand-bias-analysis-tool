@@ -12,10 +12,23 @@ import re as re
 
 
 __version__ = '0.1.0'
+FWD_KMERS, BWD_KMERS = [], []
+
+class ParseSBAT(argparse.ArgumentParser):
+    def _match_argument(self, action, arg_strings_pattern):
+        if action.dest == 'mer':
+            narg_pattern = '(-*A{1,2})'
+            match = re.match(narg_pattern, arg_strings_pattern)
+            if match:
+                return len(match.group(1))
+            else:
+                raise argparse.ArgumentError(action, "expected {} or {} arguments".format(1, 2))
+        else:
+            return super()._match_argument(action, arg_strings_pattern)
 
 
 def arg_parser():
-    parser = argparse.ArgumentParser()
+    parser = ParseSBAT()
     parser.add_argument('input',
                         nargs='+',
                         type=str,
@@ -34,15 +47,15 @@ def arg_parser():
                         default=["sbat_out/"],
                         help='output directory')
     parser.add_argument('-m', '--mer',
-                        nargs=1,
+                        nargs=2,
                         default=[0],
                         type=int,
-                        help='k-mer to count and analyze bias for. When set to 0, bias is analyzed for all k-mer '
-                             'in 5-10 range. MER must be >= 3 for analysis')
+                        metavar=("START_K", "[END_K]"),
+                        help='k-mer size to count and analyze bias for. When only START_K is set, sbat computes for only this k. If also END_K is set, range START_K-END_K is used. Default is range 5-10. MER must be >= 3 for analysis')
     parser.add_argument('-s', '--size',
                         nargs=1,
-                        default="100M",
-                        help='size of hash table for jellyfish')
+                        default=["100M"],
+                        help='size of hash table for jellyfish, default 100M')
     parser.add_argument('-t', '--threads',
                         nargs=1,
                         type=int,
@@ -50,11 +63,9 @@ def arg_parser():
                         help='number of threads jellyfish shall use for computations')
     parser.add_argument('-r', '--subsample-reads',
                         nargs=1,
-                        type=int, # TODO convert to format of hash?
                         help='select number of reads you want to use in analysis per one bin, default all')
     parser.add_argument('-b', '--subsample-bases',
                         nargs=1,
-                        type=int, # TODO convert to format of hash?
                         help='select number of nucleotides you want to use in analysis per one bin, default all')
     parser.add_argument('-i', '--bin-interval',
                         nargs=1,
@@ -65,7 +76,7 @@ def arg_parser():
                         nargs=1,
                         type=int,
                         default=[5],
-                        help='number of % taken into account when comparing highest N% and lowest N% of SB levels')
+                        help='number of %% taken into account when comparing highest N%% and lowest N%% of SB levels')
     parser.add_argument('-c', '--keep-computations',
                         action="store_true",
                         default=False,
@@ -116,16 +127,25 @@ def args_checker(args):
             a_args.threads = args.threads[0]
             jf.threads = args.threads[0]
             print(args.size)
-        jf.hash_size = parse_iso_size(args.size)
+        jf.hash_size = parse_iso_size(args.size[0])
 
-    if args.mer[0] == 0:
-        # default boundaries to iterate upon
-        a_args.start_k = 5
-        a_args.end_k = 10
+    if len(args.mer) == 1:
+        if args.mer[0] == 0:
+            # MER not set, default boundaries to iterate upon
+            a_args.start_k = 5
+            a_args.end_k = 10
+        elif args.mer[0] < 3:
+            sys.exit("MER must be a positive number higher or equal to 3")
+        else:
+            # set only first boundary, run only for this k
+            a_args.start_k = args.mer[0]
+            a_args.end_k = args.mer[0]
     else:
-        # run with specified k
+        # run with specified boundaries
+        if args.mer[1] < args.mer[0]:
+            sys.exit("END_K must be bigger or equal to START_K")
         a_args.start_k = args.mer[0]
-        a_args.end_k = args.mer[0]
+        a_args.end_k = args.mer[1]
 
     if args.detect_nanopore:
         nano = Nanopore()
