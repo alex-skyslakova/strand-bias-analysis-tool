@@ -7,12 +7,23 @@ import dateutil.rrule as rrule
 from Bio import SeqIO
 from Bio.SeqIO.FastaIO import SimpleFastaParser
 
+# dict of nucleotides
+# duplicities for small letters are in order to better up performance
+# (direct dict lookup is faster than converting char to uppercase and then lookup)
 COMPLEMENTS_DICT = {'A': 'T',
                     'C': 'G',
                     'G': 'C',
-                    'T': 'A'}
+                    'T': 'A',
+                    'a': 'T',
+                    'c': 'G',
+                    't': 'A',
+                    'g': 'C'}
 
-UNITS = {"K": 10 ** 3, "M": 10 ** 6, "G": 10 ** 9, "T": 10 ** 12}
+# basic ISO suffices
+UNITS = {"K": 10 ** 3,
+         "M": 10 ** 6,
+         "G": 10 ** 9,
+         "T": 10 ** 12}
 
 
 def get_filename(filepath):
@@ -113,29 +124,36 @@ def parse_iso_size(size):
     :param size: number to be converted
     :return: long representation of number
     """
-    _, number, unit = re.split(r'(\d+)', size)
-    if unit in UNITS.keys():
-        return int(float(number) * UNITS[unit])
+    if not size.isalnum():
+        sys.exit("SIZE: expecting positive number, optionally in ISO format")
+    if not size.isnumeric():
+        _, number, unit = re.split(r'(\d+)', size)
+        if unit in UNITS.keys():
+            result = int(float(number) * UNITS[unit])
+        else:
+            sys.exit("unsupported suffix: {}, use one of K M G T".format(unit))
     else:
-        sys.exit("unsupported suffix: {}, use one of K M G T".format(unit))
+        result = size
+    try:
+        return int(result)
+    except:
+        sys.exit("--size parameter must be integer")
 
 
 def gc_percentage(string):
     """
     Function to compute percentage of Cs and Gs in string.
     :param string: string to compute percentage in
-    :return: percentage of CG content
+    :return: percentage of GC content
     """
-    cg = (string.count("C") + string.count("G")) / len(string) * 100
-    return round(cg, 3)
+    gc = (string.count("C") + string.count("G")) / len(string) * 100
+    return round(gc, 3)
 
 
-def split_forwards_and_backwards(k):
+def split_forwards_and_backwards(all_kmers):
     """
     Function to divide all possible kmers of length k into two groups, where one contains complements of another
     """
-    # generate all possible combinations of length k
-    all_kmers = [''.join(i) for i in list(itertools.product("ACGT", repeat=k))]
 
     # use sets for faster lookup
     forwards = set()
@@ -173,7 +191,7 @@ def get_reverse_complement(seq):
     """
     reverse_complement = ""
     for n in reversed(seq):
-        reverse_complement += COMPLEMENTS_DICT[n.capitalize()]
+        reverse_complement += COMPLEMENTS_DICT[n]
     return reverse_complement
 
 
