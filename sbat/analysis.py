@@ -109,12 +109,12 @@ class Analysis:
         analysis.to_csv(analysis_name, index=False)
         return analysis_name
 
-    def plot_cg_from_dataframe(self, dfs):
+    def plot_gc_from_dataframe(self, dfs):
         if all(x is None for x in dfs):
             return
-        upper_cg = []
+        upper_gc = []
         upper_biases = []
-        lower_cg = []
+        lower_gc = []
         lower_biases = []
         kmers = []
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 22))
@@ -205,7 +205,7 @@ class Analysis:
                 plt.legend()
             except Exception as e:
                 print("Error occurred during polynomial fitting: {}\nskipping...".format(e))
-        fig_name = unique_path(os.path.join(self.fig_dir, 'fig_ci_{0}_{1}.png'.format(self.filename, k)))
+        fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_ci_{0}_{1}.png'.format(self.filename, k)))
         plt.savefig(fig_name)
         plt.close()
 
@@ -225,13 +225,13 @@ class Analysis:
             x_axis = "batch"
             plt.title('Mean and Median of Strand Bias for K={}'.format(k))
             plt.xlabel("Bins", fontsize=14)
-            fig_name = unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_k{1}.png'.format(name, k)))
+            fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_k{1}.png'.format(name, k)))
             plt.xticks(df[x_axis], fontsize=12)
         else:  # plotting SB x sizes of K (primary analysis)
             x_axis = "k"
             plt.title('Mean and Median of Strand Bias')
             plt.xlabel("K", fontsize=14)
-            fig_name = unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}.png'.format(name)))
+            fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}.png'.format(name)))
             plt.xticks(df[x_axis], fontsize=12)
         plt.yticks(fontsize=12)
         plt.plot(df[x_axis], df['bias_mean'], '-bo', label='Mean value of strand bias')
@@ -262,7 +262,7 @@ class Analysis:
             writer.writerow(stat)
 
     def plot_kmers_vs_bias(self, df, k):
-        df["more_freq_count"] = df.apply(lambda row: select_more_frequent(row), axis=1)
+        df["more_freq_count"] = df.apply(lambda row: utils.select_more_frequent(row), axis=1)
         df = df.sort_values(by=['more_freq_count'], ascending=False)
         kmers = df["seq"]
         bias = df["strand_bias_%"]
@@ -279,7 +279,7 @@ class Analysis:
         else:
             plt.xticks(range(len(freq)), freq, rotation=90, fontsize=3.5)
 
-        fig_name = unique_path(
+        fig_name = utils.unique_path(
             os.path.join(self.fig_dir, 'fig_kmer_vs_bias_{0}_k{1}.png'.format(self.filename, k)))
         plt.savefig(fig_name, dpi=400)
         plt.close()
@@ -287,7 +287,7 @@ class Analysis:
     def track_most_common_kmer_change_freq(self, dfs, k):
         if dfs == None or len(dfs) < 2:
             return
-        fwds, bwds = split_forwards_and_backwards(k)
+        fwds, bwds = utils.split_forwards_and_backwards(dfs[0]["seq"])
         fwds.sort()
         kmer_changes = pd.DataFrame(
             data={'seq': fwds},
@@ -299,8 +299,8 @@ class Analysis:
             if df is None or df.empty:
                 valid_bins -= 1
                 continue
-            df["freq_count"] = df.apply(lambda row: select_more_frequent(row), axis=1)
-            df = df.sort_values(by=['seq'])[['seq', 'freq_count', 'CG_%', 'strand_bias_%',]]
+            df["freq_count"] = df.apply(lambda row: utils.select_more_frequent(row), axis=1)
+            df = df.sort_values(by=['seq'])[['seq', 'freq_count', 'GC_%', 'strand_bias_%',]]
             if batch != 0:
                 df = df[["seq", "strand_bias_%"]]
             kmer_changes = kmer_changes.merge(df, how='right', on='seq', suffixes=("", "_batch_{}".format(batch))).dropna()
@@ -313,7 +313,7 @@ class Analysis:
         kmer_changes = kmer_changes.sort_values(by=['freq_count'], ascending=False)
         kmer_changes['diff'] = abs(kmer_changes['strand_bias_%_batch_{}'.format(last_bin)] - kmer_changes['strand_bias_%_batch_0'])
         kmer_changes = kmer_changes.round(3)
-        filename = unique_path(os.path.join(self.out_dir, "kmer_diff_k{}_{}.csv".format(k, self.filename)))
+        filename = utils.unique_path(os.path.join(self.out_dir, "kmer_diff_k{}_{}.csv".format(k, self.filename)))
         kmer_changes.to_csv(filename, index=None)
 
 

@@ -61,7 +61,6 @@ class Nanopore:
             self.common.track_most_common_kmer_change_freq(batch_dfs, k)
 
     # Nanopore bias comparation per hours
-
     def bin_nanopore(self, fastq, interval=1):
         print("in bin")
         subsampling = self.subs_reads != math.inf or self.subs_bases != math.inf

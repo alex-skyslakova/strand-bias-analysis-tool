@@ -167,7 +167,7 @@ def main():
                 analysis.plot_kmers_vs_bias(df, k)
         analysis.draw_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
         analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
-        analysis.plot_cg_from_dataframe(dfs)
+        analysis.plot_gc_from_dataframe(dfs)
     if not analysis.keep_computations:
         shutil.rmtree(analysis.dump_dir)
         if jf is not None:
