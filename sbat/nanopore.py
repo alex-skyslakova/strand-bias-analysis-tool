@@ -44,20 +44,21 @@ class Nanopore:
             data={},
             columns=['seq', 'seq_count', 'rev_complement', 'rev_complement_count', 'ratio', 'strand_bias_%', 'CG_%'])
 
-        for k in range(self.common.start_k, self.common.end_k + 1):
-            batch_dfs = []
-            for index, file in enumerate(batch_files):
-                if file is None:
-                    batch_dfs.append(file)
-                    continue
-                df_file = self.jf.run_jellyfish(file, k)
-                current_df = self.common.jellyfish_to_dataframe(df_file, k, batch=index)
-                dataframe = pd.concat([dataframe, current_df])
-                batch_dfs.append(current_df)
-            self.common.plot_conf_interval_graph(batch_dfs, k, start_index=self.common.start_k, nanopore=True)
-            self.common.draw_basic_stats_lineplot(
-                get_filename(input), self.common.np_sb_analysis_file, k, nanopore=True)
-            self.common.track_most_common_kmer_change_freq(batch_dfs, k)
+        # nanopore analysis runs only for the lowest k in the range due to more accurate results from small ks
+        # it can be easily upgraded to run for all ks in range, but at the expense of speed
+        batch_dfs = []
+        for index, file in enumerate(batch_files):
+            if file is None:
+                batch_dfs.append(file)
+                continue
+            df_file = self.jf.run_jellyfish(file, self.common.start_k)
+            current_df = self.common.jellyfish_to_dataframe(df_file, self.common.start_k, batch=index)
+            dataframe = pd.concat([dataframe, current_df])
+            batch_dfs.append(current_df)
+        self.common.plot_conf_interval_graph(batch_dfs, self.common.start_k, start_index=self.common.start_k, nanopore=True)
+        self.common.plot_basic_stats_lineplot(
+            get_filename(input), self.common.np_sb_analysis_file, self.common.start_k, nanopore=True)
+        self.common.track_most_common_kmer_change_freq(batch_dfs, self.common.start_k)
 
     # Nanopore bias comparation per hours
     def bin_nanopore(self, fastq, interval=1):
