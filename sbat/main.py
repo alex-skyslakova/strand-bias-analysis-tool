@@ -185,7 +185,7 @@ def main():
             dfs.append(df)
             if df is not None:
                 analysis.plot_kmers_vs_bias(df, k)
-        analysis.draw_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
+        analysis.plot_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
         analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
         analysis.plot_gc_from_dataframe(dfs)
     if not analysis.keep_computations:

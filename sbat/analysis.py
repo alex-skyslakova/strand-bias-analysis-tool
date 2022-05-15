@@ -209,7 +209,7 @@ class Analysis:
         plt.savefig(fig_name)
         plt.close()
 
-    def draw_basic_stats_lineplot(self, name, statfile, k=None, nanopore=False):
+    def plot_basic_stats_lineplot(self, name, statfile, k=None, nanopore=False):
         df = pd.read_csv(statfile)
         if k is not None:
             df = df.loc[df['k'] == k].dropna()
@@ -219,25 +219,29 @@ class Analysis:
             return
 
         # Plot a simple line chart
-        plt.figure()
-        plt.ylabel("Strand bias", fontsize=14)
+        fig = plt.figure(figsize=(9, 6))
+        plt.ylabel("Strand bias", fontsize=16)
         if nanopore:  # plotting SB x Bins for specific size of K (nanopore analysis)
             x_axis = "batch"
-            plt.title('Mean and Median of Strand Bias for K={}'.format(k))
-            plt.xlabel("Bins", fontsize=14)
+            plt.title('Mean and Median of Strand Bias for K={}'.format(k), fontsize=18)
+            plt.xlabel("Bins", fontsize=16)
             fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_k{1}.png'.format(name, k)))
-            plt.xticks(df[x_axis], fontsize=12)
+            bin_count = df[x_axis].max() + 1
+            # print label of each bin, if there is too much of them, print only every count // 10
+            tick_labels = range(0, df[x_axis].max() + 1)[::(bin_count//10)]
+            plt.xticks(tick_labels, fontsize=14)
+
         else:  # plotting SB x sizes of K (primary analysis)
             x_axis = "k"
-            plt.title('Mean and Median of Strand Bias')
-            plt.xlabel("K", fontsize=14)
+            plt.title('Mean and Median of Strand Bias', fontsize=20)
+            plt.xlabel("K", fontsize=16)
             fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}.png'.format(name)))
-            plt.xticks(df[x_axis], fontsize=12)
-        plt.yticks(fontsize=12)
+            plt.xticks(df[x_axis], fontsize=14)
+        plt.yticks(fontsize=14)
         plt.plot(df[x_axis], df['bias_mean'], '-bo', label='Mean value of strand bias')
         plt.plot(df[x_axis], df['bias_median'], '-go', label='Median value of strand bias')
 
-        plt.legend()
+        plt.legend(fontsize=14)
         plt.savefig(fig_name)
         plt.close()
 
@@ -262,6 +266,7 @@ class Analysis:
             writer.writerow(stat)
 
     def plot_kmers_vs_bias(self, df, k):
+        # get more frequent out of k-mer and its rev. complement
         df["more_freq_count"] = df.apply(lambda row: utils.select_more_frequent(row), axis=1)
         df = df.sort_values(by=['more_freq_count'], ascending=False)
         kmers = df["seq"]
@@ -269,13 +274,12 @@ class Analysis:
 
         plt.figure(figsize=(26, 10))
         plt.margins(x=0.01)
-
         plt.title("K-mers of Length {} vs Strand Bias".format(k), fontsize=28)
         plt.xlabel('K-mers', fontsize=25)
         plt.ylabel('Strand Bias [%]', fontsize=25)
         plt.yticks(fontsize=18)
         ax = plt.scatter(kmers, bias, marker="o", color="green", s=6)
-        if k > 5:
+        if k > 5:  # no reason in printing k-mers, there is too much of them to fit for k > 5
             ax.axes.xaxis.set_ticks([])
         else:
             plt.xticks(range(len(kmers)), kmers, rotation=90, fontsize=3.5)
