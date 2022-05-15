@@ -266,22 +266,23 @@ class Analysis:
         df = df.sort_values(by=['more_freq_count'], ascending=False)
         kmers = df["seq"]
         bias = df["strand_bias_%"]
-        freq = df["more_freq_count"]
 
-        plt.figure(figsize=(35, 10))
+        plt.figure(figsize=(26, 10))
+        plt.margins(x=0.01)
 
-        plt.title("K-mers of Length {} vs Strand Bias".format(k), fontsize=25)
+        plt.title("K-mers of Length {} vs Strand Bias".format(k), fontsize=28)
         plt.xlabel('K-mers', fontsize=25)
-        plt.ylabel('Strand bias [%]', fontsize=25)
+        plt.ylabel('Strand Bias [%]', fontsize=25)
+        plt.yticks(fontsize=18)
         ax = plt.scatter(kmers, bias, marker="o", color="green", s=6)
         if k > 5:
             ax.axes.xaxis.set_ticks([])
         else:
-            plt.xticks(range(len(freq)), freq, rotation=90, fontsize=3.5)
+            plt.xticks(range(len(kmers)), kmers, rotation=90, fontsize=3.5)
 
         fig_name = utils.unique_path(
             os.path.join(self.fig_dir, 'fig_kmer_vs_bias_{0}_k{1}.png'.format(self.filename, k)))
-        plt.savefig(fig_name, dpi=400)
+        plt.savefig(fig_name, dpi=250)
         plt.close()
 
     def track_most_common_kmer_change_freq(self, dfs, k):
