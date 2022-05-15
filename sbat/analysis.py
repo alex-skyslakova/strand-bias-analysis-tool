@@ -117,7 +117,7 @@ class Analysis:
         lower_gc = []
         lower_biases = []
         kmers = []
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 22))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 25))
 
         for i, df in enumerate(dfs):
             if df is None or len(utils.get_n_percent(df, self.whisker).index) == 0:
@@ -140,26 +140,27 @@ class Analysis:
         y_label = 'Mean Strand bias [%]'
 
         for ax in [ax1, ax2, ax3]:
-            ax.set_xlabel(x_label, fontsize=18)
-            ax.set_ylabel(y_label, fontsize=18)
-            ax.xaxis.set_tick_params(labelsize=18)
-            ax.yaxis.set_tick_params(labelsize=18)
+            ax.set_xlabel(x_label, fontsize=27)
+            ax.set_ylabel(y_label, fontsize=27)
+            ax.xaxis.set_tick_params(labelsize=25)
+            ax.yaxis.set_tick_params(labelsize=25)
 
-        ax1.set_title("CG Content vs Strand Bias in Top " + str(self.whisker) + "% of SB Score", fontsize=20)
-        ax1.scatter(upper_cg, upper_biases, marker="^", color="red")
+        ax1.set_title("GC Content vs Strand Bias in Top " + str(self.whisker) + "% of SB Score", fontsize=30)
+        ax1.scatter(upper_gc, upper_biases, marker="^", color="red", s=300)
 
-        ax2.set_title("CG content vs Strand Bias in Bottom " + str(self.whisker) + "% of SB Score", fontsize=20)
-        ax2.scatter(lower_cg, lower_biases, marker="v", color="green")
+        ax2.set_title("GC content vs Strand Bias in Bottom " + str(self.whisker) + "% of SB Score", fontsize=30)
+        ax2.scatter(lower_gc, lower_biases, marker="v", color="green", s=300)
 
-        ax3.set_title("CG content vs Strand Bias in Bottom and Top " + str(self.whisker) + "% of SB Score", fontsize=20)
-        ax3.scatter(lower_cg, lower_biases, marker="v", color="green")
-        ax3.scatter(upper_cg, upper_biases, marker="^", color="red")
+        ax3.set_title("GC content vs Strand Bias in Bottom and Top " + str(self.whisker) + "% of SB Score", fontsize=30)
+        ax3.scatter(lower_gc, lower_biases, marker="v", color="green", s=300)
+        ax3.scatter(upper_gc, upper_biases, marker="^", color="red", s=300)
 
         for i, txt in enumerate(kmers):
-            ax1.annotate(" " + str(txt), (upper_cg[i], upper_biases[i]), fontsize=15)
-            ax2.annotate(" " + str(txt), (lower_cg[i], lower_biases[i]), fontsize=15)
-        fig_path = os.path.join(self.fig_dir, "fig_cg_{0}%_{1}.png".format(str(self.whisker), self.filename))
-        fig_path = unique_path(fig_path)
+            ax1.annotate(" " + str(txt), (upper_gc[i], upper_biases[i]), fontsize=24)
+            ax2.annotate(" " + str(txt), (lower_gc[i], lower_biases[i]), fontsize=24)
+        fig_path = os.path.join(self.fig_dir, "fig_gc_{0}%_{1}.png".format(str(self.whisker), self.filename))
+        fig_path = utils.unique_path(fig_path)
+        plt.tight_layout(pad=1.5)
         plt.savefig(fig_path)
 
     def plot_conf_interval_graph(self, dataframes, k='', start_index=0, nanopore=False):  # TODO fix args
