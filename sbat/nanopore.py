@@ -12,8 +12,8 @@ from dateutil.parser import parse as dparse
 from sbat.utils import get_filename, hours_aligned, unique_path
 import bisect
 
-NANOPORE_BIN_FORMAT = 'nanopore_{0}_batch_{1}.fasta'
-NANOPORE_BIN_DF_FORMAT = 'output_{0}_nanopore_{1}_batch_{2}.csv'
+NANOPORE_BIN_FORMAT = 'nanopore_{0}_bin_{1}.fasta'
+NANOPORE_BIN_DF_FORMAT = 'output_{0}_nanopore_{1}_bin_{2}.csv'
 
 
 class Nanopore:
@@ -41,7 +41,7 @@ class Nanopore:
         """
         bin_files = self.bin_nanopore(input, self.bin_interval)
         if len(bin_files) < 2:
-            print("data duration is too short for analysis of hour-long batches, aborting...")
+            print("data duration is too short for analysis of {}-hour-long bins, aborting...".format(self.bin_interval))
             return
         self.common.np_sb_analysis_file = self.common.init_analysis(nanopore=True)
         dataframe = pd.DataFrame(
@@ -56,7 +56,7 @@ class Nanopore:
                 bin_dfs.append(file)
                 continue
             df_file = self.jf.run_jellyfish(file, self.common.start_k)
-            current_df = self.common.jellyfish_to_dataframe(df_file, self.common.start_k, batch=index)
+            current_df = self.common.jellyfish_to_dataframe(df_file, self.common.start_k, bin=index)
             dataframe = pd.concat([dataframe, current_df])
             bin_dfs.append(current_df)
         self.common.plot_conf_interval_graph(bin_dfs, self.common.start_k, start_index=self.common.start_k, nanopore=True)
@@ -72,7 +72,7 @@ class Nanopore:
         :param interval: number of hours that should fall into one bin
         :return: list of newly created filenames with None on indexes, where bin was empty
         """
-        print("in bin")
+        print("splitting dataset...")
         subsampling = self.subs_reads != math.inf or self.subs_bases != math.inf
         file_type = 'fastq' if fastq.split('.')[-1] == 'fastq' else 'fasta'
 
@@ -88,15 +88,15 @@ class Nanopore:
                 end = record_time
                 
         # find closest whole hour to start and yield timestamps for each 'interval' hours until reaching end
-        batches = hours_aligned(start, end, interval)  
-        reads_per_bin = [0 for _ in range(len(batches))]  # keep info about reads
-        bases_per_bin = [0 for _ in range(len(batches))]  # keep info about bases
-        bin_files = ["" for _ in range(len(batches))]  # filenames of newly created bins
+        bins = hours_aligned(start, end, interval)
+        reads_per_bin = [0 for _ in range(len(bins))]  # keep info about reads
+        bases_per_bin = [0 for _ in range(len(bins))]  # keep info about bases
+        bin_files = ["" for _ in range(len(bins))]  # filenames of newly created bins
 
         for record in SeqIO.parse(fastq, file_type):
             record_time = dparse([i for i in record.description.split() if i.startswith('start_time')][0].split('=')[1])
             # find position of current record_time in list of timestamps -- equal to bin positioning
-            bin = bisect.bisect_left(batches, record_time)
+            bin = bisect.bisect_left(bins, record_time)
             if subsampling and (
                     bases_per_bin[bin] >= self.subs_bases or reads_per_bin[bin] >= self.subs_reads):
                 continue
@@ -123,7 +123,6 @@ class Nanopore:
         :param what_of: "Reads" or "Nucleotides" based on what is to be analysed (just for plot name)
         :return: None
         """
-        print(counts_per_bin)
         bins = [x for x in range(len(counts_per_bin))]
 
         fig, ax = plt.subplots(figsize=(18, 12))

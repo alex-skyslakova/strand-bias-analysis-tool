@@ -38,12 +38,12 @@ class Analysis:
         utils.is_or_create_dir(self.fig_dir)
         utils.is_or_create_dir(self.dump_dir)
 
-    def jellyfish_to_dataframe(self, path, k, batch=None):
+    def jellyfish_to_dataframe(self, path, k, bin=None):
         """
         Function to create dataframe with statistics based on Jellyfish output
         :param path: path to Jellyfish output
         :param k: length of kmers in given file
-        :param batch: bin number
+        :param bin: bin number
         """
         seq, seq_count = utils.parse_fasta(path)
         if len(seq) == 0:
@@ -87,7 +87,7 @@ class Analysis:
 
         filename = utils.unique_path("df_{}.csv".format(os.path.basename(path.split(".")[0])))
         # if sb_analysis:
-        self.fill_sb_analysis_from_df(jellyfish_data, k, batch)
+        self.fill_sb_analysis_from_df(jellyfish_data, k, bin)
         if self.keep_computations:
             filename = utils.unique_path(os.path.join(self.dump_dir, filename))
             jellyfish_data.to_csv(filename, index=False)
@@ -98,7 +98,7 @@ class Analysis:
         analysis = pd.DataFrame(
             data={},
             index=None,
-            columns=['file', 'k', 'batch', 'bias_mean', 'bias_median', 'bias_modus', 'percentile_5', 'percentile_95'])
+            columns=['file', 'k', 'bin', 'bias_mean', 'bias_median', 'bias_modus', 'percentile_5', 'percentile_95'])
 
         if nanopore:
             analysis_name = utils.unique_path(os.path.join(self.out_dir, 'np_sb_analysis_' + self.filename + '.csv'))
@@ -222,7 +222,7 @@ class Analysis:
         fig = plt.figure(figsize=(9, 6))
         plt.ylabel("Strand bias", fontsize=16)
         if nanopore:  # plotting SB x Bins for specific size of K (nanopore analysis)
-            x_axis = "batch"
+            x_axis = "bin"
             plt.title('Mean and Median of Strand Bias for K={}'.format(k), fontsize=18)
             plt.xlabel("Bins", fontsize=16)
             fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_k{1}.png'.format(name, k)))
@@ -245,7 +245,7 @@ class Analysis:
         plt.savefig(fig_name)
         plt.close()
 
-    def fill_sb_analysis_from_df(self, df, k, batch):
+    def fill_sb_analysis_from_df(self, df, k, bin):
         if df is None or df.empty:
             bias_mean, bias_median, bias_modus, percentile_5, percentile_95 = [math.nan for _ in range(5)]
         else:
@@ -256,8 +256,8 @@ class Analysis:
             percentile_95 = round(df['strand_bias_%'].quantile(0.95), 2)
 
         import csv
-        stat = [self.filename, k, batch, bias_mean, bias_median, bias_modus, percentile_5, percentile_95]
-        if batch is None:
+        stat = [self.filename, k, bin, bias_mean, bias_median, bias_modus, percentile_5, percentile_95]
+        if bin is None:
             sb = self.sb_analysis_file
         else:
             sb = self.np_sb_analysis_file
@@ -290,7 +290,7 @@ class Analysis:
         plt.close()
 
     def track_most_common_kmer_change_freq(self, dfs, k):
-        if dfs == None or len(dfs) < 2:
+        if dfs is None or len(dfs) < 2:
             return
         fwds, bwds = utils.split_forwards_and_backwards(dfs[0]["seq"])
         fwds.sort()
@@ -300,23 +300,23 @@ class Analysis:
         last_bin = len(dfs) - 1
         valid_bins = len(dfs)
 
-        for batch, df in enumerate(dfs):
+        for bin, df in enumerate(dfs):
             if df is None or df.empty:
                 valid_bins -= 1
                 continue
             df["freq_count"] = df.apply(lambda row: utils.select_more_frequent(row), axis=1)
             df = df.sort_values(by=['seq'])[['seq', 'freq_count', 'GC_%', 'strand_bias_%',]]
-            if batch != 0:
+            if bin != 0:
                 df = df[["seq", "strand_bias_%"]]
-            kmer_changes = kmer_changes.merge(df, how='right', on='seq', suffixes=("", "_batch_{}".format(batch))).dropna()
-            last_bin = batch
+            kmer_changes = kmer_changes.merge(df, how='right', on='seq', suffixes=("", "_bin_{}".format(bin))).dropna()
+            last_bin = bin
 
         if valid_bins <= 1:
             return
 
-        kmer_changes.rename(columns={'strand_bias_%': 'strand_bias_%_batch_0'}, inplace=True)
+        kmer_changes.rename(columns={'strand_bias_%': 'strand_bias_%_bin_0'}, inplace=True)
         kmer_changes = kmer_changes.sort_values(by=['freq_count'], ascending=False)
-        kmer_changes['diff'] = abs(kmer_changes['strand_bias_%_batch_{}'.format(last_bin)] - kmer_changes['strand_bias_%_batch_0'])
+        kmer_changes['diff'] = abs(kmer_changes['strand_bias_%_bin_{}'.format(last_bin)] - kmer_changes['strand_bias_%_bin_0'])
         kmer_changes = kmer_changes.round(3)
         filename = utils.unique_path(os.path.join(self.out_dir, "kmer_diff_k{}_{}.csv".format(k, self.filename)))
         kmer_changes.to_csv(filename, index=None)
