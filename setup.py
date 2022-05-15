@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="sbat-alex_skyslakova",
+    name="sbat",
     version="0.0.5",
     author="Alexandra Skyslakova",
     author_email="alexandra.skyslakova@gmail.com",
