@@ -4,10 +4,11 @@ import shutil
 import sys
 import argparse
 
-from jellyfish import *
-from nanopore import *
-from utils import *
-from analysis import *
+from sbat.jellyfish import Jellyfish
+from sbat.nanopore import Nanopore
+from sbat.analysis import Analysis
+from sbat.utils import check_if_nanopore, parse_iso_size
+import re as re
 
 
 __version__ = '0.1.0'
@@ -131,9 +132,9 @@ def args_checker(args):
         nano.init_common(a_args, jf)
 
         if args.subsample_reads is not None:
-            nano.subs_reads = args.subsample_reads[0]
+            nano.subs_reads = parse_iso_size(args.subsample_reads[0])
         if args.subsample_bases is not None:
-            nano.subs_bases = args.subsample_bases[0]
+            nano.subs_bases = parse_iso_size(args.subsample_bases[0])
         if args.bin_interval is not None:
             nano.bin_interval = args.bin_interval[0]
 

@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 from pytz import utc
 from dateutil.parser import parse as dparse
 
-from utils import *
+from sbat.utils import get_filename, hours_aligned, unique_path
 import bisect
 
 NANOPORE_BIN_FORMAT = 'nanopore_{0}_batch_{1}.fasta'

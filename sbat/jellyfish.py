@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-from utils import *
+from sbat.utils import is_or_create_dir
 
 
 class Jellyfish:

@@ -1,32 +1,13 @@
 import math
+import os
+import sys
+
 import numpy as np
 import pandas as pd
 import statistics
 from math import sqrt
 from matplotlib import pyplot as plt
-from utils import *
-
-# CG content
-
-# TODO not needed?
-def select_cg_range(value):
-    for border in range(10, 100 + 1, 10):
-        if value <= border:
-            return border
-
-
-# TODO not needed?
-def select_label(value):
-    if value == 0 or value == 10:
-        return '0-10% CG'
-    return '{}-{}% CG'.format(str(value - 9), str(value))
-
-
-def strand_bias_bin(bias, bin_size, max=100):
-    bin = bias // bin_size
-    if bin > max:
-        return max
-    return bin
+from sbat import utils
 
 
 class Analysis:
@@ -34,10 +15,10 @@ class Analysis:
         self.start_k = start_k
         self.end_k = end_k
         self.filepath = file
-        self.filename = get_filename(file)
+        self.filename = utils.get_filename(file)
         self.out_dir = os.path.join(output_dir)
         self.fig_dir = os.path.join(output_dir, 'figures')
-        # output files, dfs; will be removed in the end unless --kep-computations
+        # 'output' files, dfs; will be removed in the end unless --kep-computations
         self.dump_dir = os.path.join(output_dir, 'dump')
         self.sb_analysis_file = None
         self.np_sb_analysis_file = None
@@ -47,15 +28,15 @@ class Analysis:
 
     def set_file(self, file):
         self.filepath = file
-        self.filename = get_filename(file)
+        self.filename = utils.get_filename(file)
 
     def set_output(self, dir):
         self.out_dir = os.path.join(dir, self.out_dir)
         self.fig_dir = os.path.join(dir, self.fig_dir)
         self.dump_dir = os.path.join(dir, self.dump_dir)
-        is_or_create_dir(self.out_dir)
-        is_or_create_dir(self.fig_dir)
-        is_or_create_dir(self.dump_dir)
+        utils.is_or_create_dir(self.out_dir)
+        utils.is_or_create_dir(self.fig_dir)
+        utils.is_or_create_dir(self.dump_dir)
 
     def jellyfish_to_dataframe(self, path, k, batch=None):
         """
@@ -64,7 +45,7 @@ class Analysis:
         :param k: length of kmers in given file
         :param batch: bin number
         """
-        seq, seq_count = parse_fasta(path)
+        seq, seq_count = utils.parse_fasta(path)
         if len(seq) == 0:
             sys.exit("no data parsed from {}".format(path))
 
@@ -76,11 +57,11 @@ class Analysis:
             columns=['seq', 'seq_count'])
 
         # add column with reverse complements
-        jellyfish_data['rev_complement'] = jellyfish_data.apply(lambda row: get_reverse_complement(row["seq"]),
+        jellyfish_data['rev_complement'] = jellyfish_data.apply(lambda row: utils.get_reverse_complement(row["seq"]),
                                                                 axis=1)
         # split sequence set into forward and backward sequences (so that k-mer and its reverse complement
         # are not together in group)
-        fwd_kmers, bwd_kmers = split_forwards_and_backwards(k)
+        fwd_kmers, bwd_kmers = utils.split_forwards_and_backwards(seq)
 
         # remove forward group from DataFrame, to gain backward group that will be mapped to mix of k-mers
         jellyfish_backward = jellyfish_data.drop(fwd_kmers, errors="ignore").set_index("rev_complement")
@@ -94,21 +75,21 @@ class Analysis:
             jellyfish_data.rename(columns={"seq_count_": "rev_complement_count"}, inplace=True)
             # calculate ratio of forward and backward k-mer frequencies
             jellyfish_data["ratio"] = jellyfish_data.apply(
-                lambda row: get_ratio(row["seq_count"], row["rev_complement_count"]), axis=1)
+                lambda row: utils.get_ratio(row["seq_count"], row["rev_complement_count"]), axis=1)
             # calculate deviation from 100% accuracy
             jellyfish_data["strand_bias_%"] = jellyfish_data.apply(
-                lambda row: get_strand_bias_percentage(row["ratio"]),
+                lambda row: utils.get_strand_bias_percentage(row["ratio"]),
                 axis=1)
-            # calculate CG content percentage
-            jellyfish_data["CG_%"] = jellyfish_data.apply(lambda row: gc_percentage(row["seq"]), axis=1)
+            # calculate GC content percentage
+            jellyfish_data["GC_%"] = jellyfish_data.apply(lambda row: utils.gc_percentage(row["seq"]), axis=1)
             # sort data by bias in descending order
             jellyfish_data = jellyfish_data.sort_values(by=["strand_bias_%"], ascending=False)
 
-        filename = unique_path("df_{}.csv".format(os.path.basename(path.split(".")[0])))
+        filename = utils.unique_path("df_{}.csv".format(os.path.basename(path.split(".")[0])))
         # if sb_analysis:
         self.fill_sb_analysis_from_df(jellyfish_data, k, batch)
         if self.keep_computations:
-            filename = unique_path(os.path.join(self.dump_dir, filename))
+            filename = utils.unique_path(os.path.join(self.dump_dir, filename))
             jellyfish_data.to_csv(filename, index=False)
 
         return jellyfish_data
@@ -120,9 +101,9 @@ class Analysis:
             columns=['file', 'k', 'batch', 'bias_mean', 'bias_median', 'bias_modus', 'percentile_5', 'percentile_95'])
 
         if nanopore:
-            analysis_name = unique_path(os.path.join(self.out_dir, 'np_sb_analysis_' + self.filename + '.csv'))
+            analysis_name = utils.unique_path(os.path.join(self.out_dir, 'np_sb_analysis_' + self.filename + '.csv'))
         else:
-            analysis_name = unique_path(os.path.join(self.out_dir, 'sb_analysis_' + self.filename + '.csv'))
+            analysis_name = utils.unique_path(os.path.join(self.out_dir, 'sb_analysis_' + self.filename + '.csv'))
             self.sb_analysis_file = analysis_name
         print("analysis stored in: {}".format(analysis_name))
         analysis.to_csv(analysis_name, index=False)
@@ -139,23 +120,23 @@ class Analysis:
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 22))
 
         for i, df in enumerate(dfs):
-            if df is None or len(get_n_percent(df, self.whisker).index) == 0:
+            if df is None or len(utils.get_n_percent(df, self.whisker).index) == 0:
                 # skip DF if it's None or has too little values for retrieving N percent
                 continue
             kmers.append(i + self.start_k)
 
-            df_head = get_n_percent(df, self.whisker)  # get N percent with the highest bias
-            upper_cg.append(df_head["CG_%"].mean().round(2))
+            df_head = utils.get_n_percent(df, self.whisker)  # get N percent with the highest bias
+            upper_gc.append(df_head["GC_%"].mean().round(2))
             upper_biases.append(df_head["strand_bias_%"].mean().round(2))
 
-            df_tail = get_n_percent(df, self.whisker, True)  # get N percent with the lowest bias
-            lower_cg.append(None if len(df_head.index) == 0 else df_tail["CG_%"].mean().round(2))
+            df_tail = utils.get_n_percent(df, self.whisker, True)  # get N percent with the lowest bias
+            lower_gc.append(None if len(df_head.index) == 0 else df_tail["GC_%"].mean().round(2))
             lower_biases.append(None if len(df_head.index) == 0 else df_tail["strand_bias_%"].mean().round(2))
 
         if not kmers:  # no dataframe is big enough to provide data
             return
 
-        x_label = 'Mean CG content [%]'
+        x_label = 'Mean GC content [%]'
         y_label = 'Mean Strand bias [%]'
 
         for ax in [ax1, ax2, ax3]:
