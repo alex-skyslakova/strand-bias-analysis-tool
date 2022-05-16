@@ -11,14 +11,17 @@ from sbat import utils
 
 
 class Analysis:
+    """
+    Class representing primary analysis.
+    """
     def __init__(self, file=None, output_dir='', start_k=5, end_k=10, threads=1, whisker=5):
         self.start_k = start_k
         self.end_k = end_k
         self.filepath = file
-        self.filename = utils.get_filename(file)
+        self.filename = utils.get_filename(file)  # string used in further naming of the created files and figures
         self.out_dir = os.path.join(output_dir)
         self.fig_dir = os.path.join(output_dir, 'figures')
-        # 'output' files, dfs; will be removed in the end unless --kep-computations
+        # temp files, dfs; will be removed in the end unless --kep-computations
         self.dump_dir = os.path.join(output_dir, 'dump')
         self.sb_analysis_file = None
         self.np_sb_analysis_file = None
@@ -27,10 +30,18 @@ class Analysis:
         self.keep_computations = False
 
     def set_file(self, file):
+        """
+        Method to init input file and file identificator names in Analysis.
+        :param file: path passed as input
+        """
         self.filepath = file
         self.filename = utils.get_filename(file)
 
     def set_output(self, dir):
+        """
+        Init creation of directories based on setting of output dir.
+        :param dir: output dir specified by user or default 'sbat_out'
+        """
         self.out_dir = os.path.join(dir, self.out_dir)
         self.fig_dir = os.path.join(dir, self.fig_dir)
         self.dump_dir = os.path.join(dir, self.dump_dir)
@@ -124,7 +135,6 @@ class Analysis:
                 # skip DF if it's None or has too little values for retrieving N percent
                 continue
             kmers.append(i + self.start_k)
-
             df_head = utils.get_n_percent(df, self.whisker)  # get N percent with the highest bias
             upper_gc.append(df_head["GC_%"].mean().round(2))
             upper_biases.append(df_head["strand_bias_%"].mean().round(2))
@@ -163,32 +173,28 @@ class Analysis:
         plt.tight_layout(pad=1.5)
         plt.savefig(fig_path)
 
-    def plot_conf_interval_graph(self, dataframes, k='', start_index=0, nanopore=False):  # TODO fix args
-        if not nanopore:
+    def plot_conf_interval_graph(self, dataframes, k='', start_index=0, nanopore=False):
+        if not nanopore:  # CI plot for different k sizes
             x = [x for x in range(min(self.start_k, 5), max(self.end_k + 1, 11))]
-        else:
+        else:  # CI plot for bins
             x = [x for x in range(len(dataframes))]
 
-        plt.figure(figsize=(15, 7))
-        plt.xticks(x, x, fontsize=12)
-        plt.yticks(fontsize=12)
+        plt.figure(figsize=(12, 8))
+        plt.xticks(x, x, fontsize=20)
+        plt.yticks(fontsize=20)
+        plt.ylabel("Strand bias [%]", fontsize=22)
 
         if not nanopore:
-            plt.title('Confidence Interval among Different Sizes of K', fontsize=18)
+            plt.title('Confidence Interval among Different Sizes of K', fontsize=25)
+            plt.xlabel("K", fontsize=22)
         else:
-            plt.title('Confidence Interval among Bins for K={}'.format(k), fontsize=18)
+            plt.title('Confidence Interval among Bins for K={}'.format(k), fontsize=25)
+            plt.xlabel("Bins", fontsize=22)
+
         y = []
-
-        plt.ylabel("Strand bias [%]", fontsize=18)
-        if not nanopore:
-            plt.xlabel("K", fontsize=18)
-        else:
-            plt.xlabel("Bins", fontsize=18)
-
         for index, df in enumerate(dataframes):
             if df is None or df.shape[0] < 3:
                 continue
-
             if k is None or k == "":
                 index = start_index + index
 
@@ -198,13 +204,13 @@ class Analysis:
         plt.xlim(x[0] - 0.5, x[-1] + 0.5)
         plt.ylim(0, min(100, max(y) + 5))
 
-        if len(x) > 1 and len(y) > 1:
+        if len(x) == len(y) and len(x) > 1:  # there cannot be gaps in data (bins)
             try:
                 z = np.polyfit(x, y, 3)  # polynomial fit
                 p = np.poly1d(z)
-                plt.plot(x, p(x), 'r--', label="polynomial fit of 3rd degree")
-                plt.legend()
-            except Exception as e:
+                plt.plot(x, p(x), 'r--', label="polynomial fit of 3rd degree", linewidth=2)
+                plt.legend(fontsize=18)
+            except Exception as e:  # in case of a problem, just skip the polynomial fit and continue
                 print("Error occurred during polynomial fitting: {}\nskipping...".format(e))
         fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_ci_{0}_{1}.png'.format(self.filename, k)))
         plt.savefig(fig_name)
@@ -331,9 +337,9 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     top = mean - confidence_interval
     right = x + horizontal_line_width / 2
     bottom = mean + confidence_interval
-    plt.plot([x, x], [top, bottom], color=color)
-    plt.plot([left, right], [top, top], color=color)
-    plt.plot([left, right], [bottom, bottom], color=color)
-    plt.plot(x, mean, 'o', color='#f44336')
+    plt.plot([x, x], [top, bottom], color=color, linewidth=2)
+    plt.plot([left, right], [top, top], color=color, linewidth=2)
+    plt.plot([left, right], [bottom, bottom], color=color, linewidth=2)
+    plt.plot(x, mean, 'o', color='#f44336', linewidth=2)
 
     return mean, confidence_interval
