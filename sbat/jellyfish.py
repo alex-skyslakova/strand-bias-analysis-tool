@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 
 from sbat.utils import is_or_create_dir
 
@@ -18,12 +19,17 @@ class Jellyfish:
         if input_file is None:
             return None
         dump_file = os.path.join(self.jf_dir, "mer_counts.jf")
-        calculate = "jellyfish count -m {0} -s {1} -t {2} -o {3} {4}".format(k, self.hash_size, self.threads,
-                                                                             dump_file, input_file)
-        print(calculate)
-        subprocess.run(calculate.split(" "), stdout=subprocess.PIPE)
-        dump = "jellyfish dump {0}".format(dump_file)
-        output_file = os.path.join(self.jf_dir, "output_" + str(k) + "_" + os.path.basename(input_file))
-        with open(output_file, "w") as outfile:
-            subprocess.run(dump.split(" "), stdout=outfile)
-        return output_file
+
+        try:
+            calculate = "jellyfish count -m {0} -s {1} -t {2} -o {3} {4}".format(k, self.hash_size, self.threads,
+                                                                                 dump_file, input_file)
+            print(calculate)
+            subprocess.run(calculate.split(" "), stdout=subprocess.PIPE)
+            dump = "jellyfish dump {0}".format(dump_file)
+            output_file = os.path.join(self.jf_dir, "output_" + str(k) + "_" + os.path.basename(input_file))
+            with open(output_file, "w") as outfile:
+                subprocess.run(dump.split(" "), stdout=outfile)
+            return output_file
+        except Exception as e:
+            print(e)
+            sys.exit("problem running jellyfish (possibly not installed), exiting...")
