@@ -44,7 +44,9 @@ pip install -e .
 
 ## Usage
 
-In order to perform analysis on one or multiple files, use command ```sbat``` followed by your files:
+In order to perform analysis on one or multiple files, use command ```sbat``` followed by your files. By default, k-mers for k in 
+range 5 to 10 are analysed. The figures and statistics of the tool are saved into ```sbat_out``` directory, which will be created if does not exist already. By default all the partial results of the SBAT (Jellyfish-generated files, statistics for each size of k) are deleted at the end of the run. To prevent that,
+use argument ```-c```
 ```Shell
 sbat my_file.fasta my_file2.fasta my_file3.fastq
 ```
