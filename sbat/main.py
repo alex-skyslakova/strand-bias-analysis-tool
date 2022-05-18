@@ -11,10 +11,12 @@ from sbat.utils import check_if_nanopore, parse_iso_size
 import re as re
 
 
-__version__ = '0.1.0'
-FWD_KMERS, BWD_KMERS = [], []
+__version__ = '0.0.7'
 
 class ParseSBAT(argparse.ArgumentParser):
+    """
+    Extension of common ArgumentParser class in order to allow pass only one or two arguments to 'mer' parameter.
+    """
     def _match_argument(self, action, arg_strings_pattern):
         if action.dest == 'mer':
             narg_pattern = '(-*A{1,2})'
@@ -28,9 +30,12 @@ class ParseSBAT(argparse.ArgumentParser):
 
 
 def arg_parser():
+    """
+    Function for parsing arguments of the application.
+    """
     parser = ParseSBAT()
     parser.add_argument('input',
-                        nargs='+',
+                        nargs='*',
                         type=str,
                         help='fasta or fastq file to count and analyze strand bias on')
     parser.add_argument('-v', '--version',
@@ -51,7 +56,9 @@ def arg_parser():
                         default=[0],
                         type=int,
                         metavar=("START_K", "[END_K]"),
-                        help='k-mer size to count and analyze bias for. When only START_K is set, sbat computes for only this k. If also END_K is set, range START_K-END_K is used. Default is range 5-10. MER must be >= 3 for analysis')
+                        help='k-mer size to count and analyze bias for. When only START_K is set, sbat computes '
+                             'for only this k. If also END_K is set, range START_K-END_K is used. Default is range '
+                             '5-10. MER must be >= 3 for analysis')
     parser.add_argument('-s', '--size',
                         nargs=1,
                         default=["100M"],
@@ -72,7 +79,7 @@ def arg_parser():
                         type=int,
                         default=[1],
                         help='number of hours that would fall into one bin when analysing nanopore')
-    parser.add_argument('-w', '--whisker',
+    parser.add_argument('-g', '--margin',
                         nargs=1,
                         type=int,
                         default=[5],
@@ -91,6 +98,11 @@ def arg_parser():
 
 
 def args_checker(args):
+    """
+    Function for validating arguments of the application.
+    :param args: output of ArgumentParser class containing all the arguments passed to the application
+    :return: triplet of Analysis, Jellyfish and Nanopore objects initialized with app's input
+    """
     jf = None
     nano = None
     a_args = Analysis()
@@ -98,6 +110,9 @@ def args_checker(args):
     if args.version:
         version()
         sys.exit(0)
+
+    if args.input is None or args.input == []:
+        sys.exit("error: the following argument is required: input")
 
     for input_file in args.input:
         if not os.path.isfile(input_file):
@@ -108,10 +123,10 @@ def args_checker(args):
 
     a_args.set_output(args.output[0])
     a_args.keep_computations = args.keep_computations
-    if args.whisker[0] <= 0 or args.whisker[0] > 100:
-        sys.exit("whisker must be number from interval (0, 100]")
+    if args.margin[0] <= 0 or args.margin[0] > 100:
+        sys.exit("margin must be number from interval (0, 100]")
     else:
-        a_args.whisker = args.whisker[0]
+        a_args.margin = args.margin[0]
     if args.mer[0] < 3 and args.mer[0] != 0:
         sys.exit("MER must be a positive number higher or equal to 3")
 
@@ -126,7 +141,6 @@ def args_checker(args):
         else:
             a_args.threads = args.threads[0]
             jf.threads = args.threads[0]
-            print(args.size)
         jf.hash_size = parse_iso_size(args.size[0])
 
     if len(args.mer) == 1:
@@ -162,13 +176,17 @@ def args_checker(args):
 
 
 def main():
+    """
+    Function executing the core of the application.
+    """
     analysis, jf, nano, input_files = arg_parser()
-    for file in input_files:
+    for file in input_files:  # run SBAT for each input file
         analysis.set_file(file)
         analysis.init_analysis()
         print("input: " + file)
         dfs = []
-        run_nano = nano is not None and check_if_nanopore(file)
+        detect_nano = nano is not None and check_if_nanopore(file)
+        run_nano = detect_nano
         for k in range(analysis.start_k, analysis.end_k + 1):
             if jf is not None:
                 print("running computation and analysis for K=" + str(k))
@@ -185,6 +203,10 @@ def main():
             dfs.append(df)
             if df is not None:
                 analysis.plot_kmers_vs_bias(df, k)
+                if not detect_nano:
+                    # if not nanopore, create simplified version of this stats,
+                    # otherwise it is created as part of nanopore analysis
+                    analysis.track_most_common_kmer_change_freq([df], k)
         analysis.plot_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
         analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
         analysis.plot_gc_from_dataframe(dfs)

@@ -59,13 +59,6 @@ def is_or_create_dir(dir):
         os.makedirs(dir)
 
 
-def get_bin_number(text):
-    """
-    Get appendix from file number representing nanopore bin.
-    """
-    return list(map(int, re.findall(r'\d+', text)))[-1]
-
-
 def get_n_percent(df, n, tail=False):
     """
     Function to extract top (tail=False) or bottom (tail=True) n percent of data sorted by strand bias.
@@ -124,7 +117,7 @@ def parse_iso_size(size):
     :param size: number to be converted
     :return: long representation of number
     """
-    if not size.isalnum():
+    if not size.isalnum() or not any(i.isdigit() for i in size):
         sys.exit("SIZE: expecting positive number, optionally in ISO format")
     if not size.isnumeric():
         _, number, unit = re.split(r'(\d+)', size)
