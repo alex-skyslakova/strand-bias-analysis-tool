@@ -123,6 +123,8 @@ class Nanopore:
         :param what_of: "Reads" or "Nucleotides" based on what is to be analysed (just for plot name)
         :return: None
         """
+        if counts_per_bin is None or counts_per_bin == []:
+            return
         bins = [x for x in range(len(counts_per_bin))]
 
         fig, ax = plt.subplots(figsize=(18, 12))
@@ -134,13 +136,14 @@ class Nanopore:
         ax.set_xticks(x)
         plt.setp(ax.get_yticklabels(), fontsize=20)
         ax.set_xticklabels(bins, size=20)
-        freq = len(bins)//10
+        freq = (len(bins)//20) + 1
         for i, label in enumerate(ax.xaxis.get_ticklabels()):
             if i % freq == 0:
                 continue
             label.set_visible(False)
         bar_width = 1
-        cols = ax.bar(x - bar_width / 2, counts_per_bin, bar_width, label='{} counts'.format(what_of))
+        cols = ax.bar(x - bar_width / 2, counts_per_bin, bar_width, label='{} counts per time slot (bin)'.format(what_of))
+        plt.legend(fontsize=18)
         for col in cols:
             height = col.get_height()
             ax.annotate('{}'.format(height),

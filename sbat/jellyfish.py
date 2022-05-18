@@ -6,6 +6,9 @@ from sbat.utils import is_or_create_dir
 
 
 class Jellyfish:
+    """
+    Class for representation of Jellyfish.
+    """
     def __init__(self, threads=1, hash_size="100M"):
         self.threads = threads
         self.hash_size = hash_size
@@ -16,6 +19,12 @@ class Jellyfish:
         is_or_create_dir(self.jf_dir)
 
     def run_jellyfish(self, input_file, k):
+        """
+        Method to execute jellyfish with correct arguments.
+        :param input_file: input file
+        :param k: size of k for which should jellyfish detect
+        :return: file containing computed k-mers
+        """
         if input_file is None:
             return None
         dump_file = os.path.join(self.jf_dir, "mer_counts.jf")

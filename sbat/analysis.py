@@ -14,7 +14,7 @@ class Analysis:
     """
     Class representing primary analysis.
     """
-    def __init__(self, file=None, output_dir='', start_k=5, end_k=10, threads=1, whisker=5):
+    def __init__(self, file=None, output_dir='', start_k=5, end_k=10, threads=1, margin=5):
         self.start_k = start_k
         self.end_k = end_k
         self.filepath = file
@@ -25,7 +25,7 @@ class Analysis:
         self.dump_dir = os.path.join(output_dir, 'dump')
         self.sb_analysis_file = None
         self.np_sb_analysis_file = None
-        self.whisker = whisker
+        self.margin = margin
         self.threads = threads
         self.keep_computations = False
 
@@ -131,17 +131,17 @@ class Analysis:
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 25))
 
         for i, df in enumerate(dfs):
-            if df is None or len(utils.get_n_percent(df, self.whisker).index) == 0:
+            if df is None or len(utils.get_n_percent(df, self.margin).index) == 0:
                 # skip DF if it's None or has too little values for retrieving N percent
                 continue
             kmers.append(i + self.start_k)
-            df_head = utils.get_n_percent(df, self.whisker)  # get N percent with the highest bias
-            upper_gc.append(df_head["GC_%"].mean().round(2))
-            upper_biases.append(df_head["strand_bias_%"].mean().round(2))
+            df_head = utils.get_n_percent(df, self.margin)  # get N percent with the highest bias
+            upper_gc.append(None if len(df_head.index) == 0 else round(df_head["GC_%"].mean(), 2))
+            upper_biases.append(None if len(df_head.index) == 0 else round(df_head["strand_bias_%"].mean(), 2))
 
-            df_tail = utils.get_n_percent(df, self.whisker, True)  # get N percent with the lowest bias
-            lower_gc.append(None if len(df_head.index) == 0 else df_tail["GC_%"].mean().round(2))
-            lower_biases.append(None if len(df_head.index) == 0 else df_tail["strand_bias_%"].mean().round(2))
+            df_tail = utils.get_n_percent(df, self.margin, True)  # get N percent with the lowest bias
+            lower_gc.append(None if len(df_head.index) == 0 else round(df_tail["GC_%"].mean(), 2))
+            lower_biases.append(None if len(df_head.index) == 0 else round(df_tail["strand_bias_%"].mean(), 2))
 
         if not kmers:  # no dataframe is big enough to provide data
             return
@@ -155,20 +155,24 @@ class Analysis:
             ax.xaxis.set_tick_params(labelsize=25)
             ax.yaxis.set_tick_params(labelsize=25)
 
-        ax1.set_title("GC Content vs Strand Bias in Top " + str(self.whisker) + "% of SB Score", fontsize=30)
-        ax1.scatter(upper_gc, upper_biases, marker="^", color="red", s=300)
+        ax1.set_title("GC Content vs Strand Bias in Top " + str(self.margin) + "% of SB Score", fontsize=30)
+        ax1.scatter(upper_gc, upper_biases, marker="^", color="red", s=300,
+                    label="SB in bottom {}% for given k".format(self.margin))
 
-        ax2.set_title("GC content vs Strand Bias in Bottom " + str(self.whisker) + "% of SB Score", fontsize=30)
-        ax2.scatter(lower_gc, lower_biases, marker="v", color="green", s=300)
+        ax2.set_title("GC content vs Strand Bias in Bottom " + str(self.margin) + "% of SB Score", fontsize=30)
+        ax2.scatter(lower_gc, lower_biases, marker="v", color="green", s=300,
+                    label="SB in bottom {}% for given k".format(self.margin))
 
-        ax3.set_title("GC content vs Strand Bias in Bottom and Top " + str(self.whisker) + "% of SB Score", fontsize=30)
-        ax3.scatter(lower_gc, lower_biases, marker="v", color="green", s=300)
-        ax3.scatter(upper_gc, upper_biases, marker="^", color="red", s=300)
-
+        ax3.set_title("GC content vs Strand Bias in Bottom and Top " + str(self.margin) + "% of SB Score", fontsize=30)
+        ax3.scatter(lower_gc, lower_biases, marker="v", color="green", s=300,
+                    label="SB in bottom {}% for given k".format(self.margin))
+        ax3.scatter(upper_gc, upper_biases, marker="^", color="red", s=300,
+                    label="SB in bottom {}% for given k".format(self.margin))
+        plt.legend()
         for i, txt in enumerate(kmers):
             ax1.annotate(" " + str(txt), (upper_gc[i], upper_biases[i]), fontsize=24)
             ax2.annotate(" " + str(txt), (lower_gc[i], lower_biases[i]), fontsize=24)
-        fig_path = os.path.join(self.fig_dir, "fig_gc_{0}%_{1}.png".format(str(self.whisker), self.filename))
+        fig_path = os.path.join(self.fig_dir, "fig_gc_{0}%_{1}.png".format(str(self.margin), self.filename))
         fig_path = utils.unique_path(fig_path)
         plt.tight_layout(pad=1.5)
         plt.savefig(fig_path)
@@ -193,12 +197,13 @@ class Analysis:
 
         y = []
         for index, df in enumerate(dataframes):
+            legend = True if index == 0 else False
             if df is None or df.shape[0] < 3:
                 continue
             if k is None or k == "":
                 index = start_index + index
 
-            mean, ci = plot_confidence_interval(index, df['strand_bias_%'])
+            mean, ci = plot_confidence_interval(index, df['strand_bias_%'], legend=legend)
             y.append(round(mean, 3))
 
         plt.xlim(x[0] - 0.5, x[-1] + 0.5)
@@ -235,7 +240,7 @@ class Analysis:
             fig_name = utils.unique_path(os.path.join(self.fig_dir, 'fig_lineplot_{0}_k{1}.png'.format(name, k)))
             bin_count = df[x_axis].max() + 1
             # print label of each bin, if there is too much of them, print only every count // 10
-            tick_labels = range(0, df[x_axis].max() + 1)[::(bin_count//10)]
+            tick_labels = range(0, df[x_axis].max() + 1)[::((bin_count//20) + 1)]
             plt.xticks(tick_labels, fontsize=14)
 
         else:  # plotting SB x sizes of K (primary analysis)
@@ -256,9 +261,9 @@ class Analysis:
         if df is None or df.empty:
             bias_mean, bias_median, bias_modus, percentile_5, percentile_95 = [math.nan for _ in range(5)]
         else:
-            bias_mean = df['strand_bias_%'].mean().round(2)
-            bias_median = df['strand_bias_%'].median().round(2)
-            bias_modus = df['strand_bias_%'].mode().iloc[0].round(2)
+            bias_mean = round(df['strand_bias_%'].mean(), 2)
+            bias_median = round(df['strand_bias_%'].median(), 2)
+            bias_modus = round(df['strand_bias_%'].mode().iloc[0], 2)
             percentile_5 = round(df['strand_bias_%'].quantile(0.05), 2)
             percentile_95 = round(df['strand_bias_%'].quantile(0.95), 2)
 
@@ -285,7 +290,8 @@ class Analysis:
         plt.xlabel('K-mers', fontsize=25)
         plt.ylabel('Strand Bias [%]', fontsize=25)
         plt.yticks(fontsize=18)
-        ax = plt.scatter(kmers, bias, marker="o", color="green", s=6)
+        ax = plt.scatter(kmers, bias, marker="o", color="green", s=6, label="specific k-mer")
+        plt.legend(fontsize=20)
         if k > 5:  # no reason in printing k-mers, there is too much of them to fit for k > 5
             ax.axes.xaxis.set_ticks([])
         else:
@@ -297,7 +303,7 @@ class Analysis:
         plt.close()
 
     def track_most_common_kmer_change_freq(self, dfs, k):
-        if dfs is None or len(dfs) < 2:
+        if dfs is None or len(dfs) < 1:
             return
         fwds, bwds = utils.split_forwards_and_backwards(dfs[0]["seq"])
         fwds.sort()
@@ -318,7 +324,12 @@ class Analysis:
             kmer_changes = kmer_changes.merge(df, how='right', on='seq', suffixes=("", "_bin_{}".format(bin))).dropna()
             last_bin = bin
 
-        if valid_bins <= 1:
+        if valid_bins < 1:
+            return
+        if valid_bins == 1:
+            filename = utils.unique_path(os.path.join(self.out_dir, "kmer_freq_k{}_{}.csv".format(k, self.filename)))
+            kmer_changes = kmer_changes.sort_values(by=['freq_count'], ascending=False)
+            kmer_changes.to_csv(filename, index=None)
             return
 
         kmer_changes.rename(columns={'strand_bias_%': 'strand_bias_%_bin_0'}, inplace=True)
@@ -329,7 +340,7 @@ class Analysis:
         kmer_changes.to_csv(filename, index=None)
 
 
-def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.25):
+def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line_width=0.2, legend=False):
     mean = statistics.mean(values)
     stdev = statistics.stdev(values)
     confidence_interval = z * stdev / sqrt(len(values))
@@ -337,9 +348,9 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     top = mean - confidence_interval
     right = x + horizontal_line_width / 2
     bottom = mean + confidence_interval
-    plt.plot([x, x], [top, bottom], color=color, linewidth=2)
+    plt.plot([x, x], [top, bottom], color=color, linewidth=2, label="Confidence Level 95%" if legend else "")
     plt.plot([left, right], [top, top], color=color, linewidth=2)
     plt.plot([left, right], [bottom, bottom], color=color, linewidth=2)
-    plt.plot(x, mean, 'o', color='#f44336', linewidth=2)
+    plt.plot(x, mean, 'o', color='#f44336', linewidth=2, label="Mean Strand Bias" if legend else "")
 
     return mean, confidence_interval
