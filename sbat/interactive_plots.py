@@ -123,7 +123,7 @@ class IPlotter:
             name="kmers_vs_sb",
             title="Kmers vs Strand Bias",
             tools="crosshair, pan,reset, save,wheel_zoom, box_select, "
-            "poly_select, tap, box_zoom",
+            "poly_select, tap, box_zoom, lasso_select",
         )
 
         tooltips = [
@@ -143,12 +143,12 @@ class IPlotter:
         )
 
         # get more frequent out of k-mer and its rev. complement
-        self.kmer_vs_sb_df = self.kmer_vs_sb_df.sort_values(by=['more_freq_count'], ascending=False)
-        self.kmer_vs_sb_df["index"] = range(1, len(self.kmer_vs_sb_df) + 1)
+        self.kmer_vs_sb_df = self.kmer_vs_sb_df.sort_values(by=['more_freq_count'], ascending=False, ignore_index=True)
+        self.kmer_vs_sb_df["order_index"] = range(1, len(self.kmer_vs_sb_df) + 1)
         self.kmer_vs_sb_ds = ColumnDataSource(self.kmer_vs_sb_df)
 
         plot.circle(
-            "index",
+            "order_index",
             "strand_bias_%",
             source=self.kmer_vs_sb_ds,
             name="Strand bias of k-mers of size {} in relation with frequency".format(self.size),
@@ -232,12 +232,9 @@ class IPlotter:
         :param new:
         :return:
         """
-        if not self.kmer_vs_sb_ds.selected.indices:
-            self.kmer_vs_sb_df["selected"] = False
-        else:
-            self.kmer_vs_sb_df["selected"] = False
+        self.kmer_vs_sb_df["selected"] = False
         for index in new:
-            df_index = self.kmer_vs_sb_ds.data["index"][index]
+            df_index = self.kmer_vs_sb_ds.data["order_index"][index]
             self.kmer_vs_sb_df.at[df_index, "selected"] = True
         selected_df = self.kmer_vs_sb_df[self.kmer_vs_sb_df["selected"]]
         self.data_table.source.data = selected_df
@@ -325,10 +322,11 @@ def analyze_bias(analysis, jf, nano, input_files):
                     # if not nanopore, create simplified version of this stats,
                     # otherwise it is created as part of nanopore analysis
                     analysis.track_most_common_kmer_change_freq([df], k)
-        analysis.plotter.gc_data = analysis.calculate_gc_plot_data(dfs)
-        analysis.plot_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
-        analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
-        analysis.plot_gc_from_dataframe(analysis.plotter.gc_data)
+        if analysis.interactive:
+            analysis.plotter.gc_data = analysis.calculate_gc_plot_data(dfs)
+            analysis.plot_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
+            analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
+            analysis.plot_gc_from_dataframe(analysis.plotter.gc_data)
     if not analysis.keep_computations:
         shutil.rmtree(analysis.dump_dir)
         if jf is not None:
