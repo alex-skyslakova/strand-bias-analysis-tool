@@ -5,7 +5,7 @@ import sys
 import argparse
 
 from sbat.analysis import Analysis
-from sbat.jellyfish import Jellyfish
+from sbat.jellyfish_analysis import Jellyfish
 from sbat.nanopore import Nanopore
 from sbat.interactive_plots import IPlotter, analyze_bias, run_server
 
@@ -13,7 +13,7 @@ from sbat.utils import check_if_nanopore, parse_iso_size
 import re as re
 
 
-__version__ = '0.0.7'
+__version__ = '0.0.9'
 RUN_SERVER = False
 
 
@@ -195,8 +195,12 @@ def version():
     print("StrandBiasAnalysisTool v" + __version__)
 
 
-if __name__ == '__main__':
+def main():
     analysis, jf, nano, input_files = arg_parser()
     analyze_bias(analysis, jf, nano, input_files)
     if RUN_SERVER:
         run_server()
+
+
+if __name__ == '__main__':
+    main()

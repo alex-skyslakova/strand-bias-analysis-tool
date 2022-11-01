@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="sbat",
-    version="0.0.7",
+    version="0.0.9",
     author="Alexandra Skyslakova",
     author_email="alexandra.skyslakova@gmail.com",
     description="A tool for strand bias analysis of NGS data",

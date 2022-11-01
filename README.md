@@ -70,3 +70,6 @@ To see all possible options, run:
 ```Shell
 sbat -h
 ```
+
+From version 0.0.9, ```-p``` parameter enables creation of interactive plots as well as .jpg results. After analysis 
+finishes, SBAT creates Bokeh server on http://localhost:5006/

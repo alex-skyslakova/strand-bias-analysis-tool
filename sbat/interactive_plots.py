@@ -10,16 +10,17 @@ from tornado.ioloop import IOLoop
 from bokeh.layouts import column
 from bokeh.models import Button, FileInput, NumericInput, RangeSlider
 
+from sbat import utils
+
 PLOTTER = None
-import utils
 
 
 class IPlotter:
-    def __init__(self, name, size, data, margin=5):
+    def __init__(self, name, size, data, sb_file, margin=5, output=''):
         self.size = size
         self.margin = margin
         self.filename = name
-        self.stats = pd.read_csv("np_sb_analysis_example.csv")
+        self.stats = None
         self.df = data
         self.df["more_freq_count"] = self.df.apply(lambda row: utils.select_more_frequent(row),
                                                                          axis=1)
@@ -28,6 +29,7 @@ class IPlotter:
         self.max_freq = self.df["more_freq_count"].max()
         self.ds = ColumnDataSource().data = self.df
         self.plot_ds = ColumnDataSource(self.df)
+        self.sb = sb_file
 
         self.kmer_vs_sb_df = self.df.copy()
         self.kmer_vs_sb_ds = ColumnDataSource(self.kmer_vs_sb_df)
@@ -43,7 +45,6 @@ class IPlotter:
             tools="crosshair, pan,reset, save,wheel_zoom, box_select, "
                   "poly_select, tap, box_zoom",
         )
-        print("pased plot creation")
 
         tooltips = [
             ("Average GC Content (%)", "@x"),
@@ -62,16 +63,15 @@ class IPlotter:
                       fill_color="red",
                       size=10,
                       legend_label="GC Content vs Strand Bias in Top {}% of SB Score".format(self.margin))
-        print("passed triangle 1")
+
         plot.triangle(self.gc_data.lower_gc,
                       self.gc_data.lower_biases,
                       color="green",
                       fill_color="green",
                       size=10,
                       legend_label="GC Content vs Strand Bias in Bottom {}% of SB Score".format(self.margin))
-        print("passed triangle 2")
+
         plot.legend.location = "top_left"
-        #self.gc_plot = plot
         return plot
 
     def create_lineplot(self, bins=True, k=None):
@@ -88,13 +88,24 @@ class IPlotter:
             tools="crosshair, pan,reset, save,wheel_zoom, box_select, "
                   "poly_select, tap, box_zoom",
         )
-
-        ds = ColumnDataSource(self.df)
-        mean = plot.line(self.stats[x_axis.lower()], self.stats["bias_mean"], line_color="green", legend_label="Mean", line_width=3)
-        median = plot.line(self.stats[x_axis.lower()], self.stats["bias_median"], line_color="blue", legend_label="Median", line_width=3)
-        modus = plot.line(self.stats[x_axis.lower()], self.stats["bias_modus"], line_color="pink", legend_label="Mode", line_width=3)
-        perc_5 = plot.line(self.stats[x_axis.lower()], self.stats["percentile_5"], line_color="orange", legend_label="5th Percentile", line_width=3)
-        perc_95 = plot.line(self.stats[x_axis.lower()], self.stats["percentile_95"], line_color="red", legend_label="95th Percentile", line_width=3)
+        self.stats = pd.read_csv(self.sb)
+        if len(self.stats) == 1:
+            mean = plot.circle(self.stats[x_axis.lower()], self.stats["bias_mean"], line_color="green",
+                             legend_label="Mean", line_width=3)
+            median = plot.circle(self.stats[x_axis.lower()], self.stats["bias_median"], line_color="blue",
+                               legend_label="Median", line_width=3)
+            modus = plot.circle(self.stats[x_axis.lower()], self.stats["bias_modus"], line_color="pink",
+                              legend_label="Mode", line_width=3)
+            perc_5 = plot.circle(self.stats[x_axis.lower()], self.stats["percentile_5"], line_color="orange",
+                               legend_label="5th Percentile", line_width=3)
+            perc_95 = plot.circle(self.stats[x_axis.lower()], self.stats["percentile_95"], line_color="red",
+                                legend_label="95th Percentile", line_width=3)
+        else:
+            mean = plot.line(self.stats[x_axis.lower()], self.stats["bias_mean"], line_color="green", legend_label="Mean", line_width=3)
+            median = plot.line(self.stats[x_axis.lower()], self.stats["bias_median"], line_color="blue", legend_label="Median", line_width=3)
+            modus = plot.line(self.stats[x_axis.lower()], self.stats["bias_modus"], line_color="pink", legend_label="Mode", line_width=3)
+            perc_5 = plot.line(self.stats[x_axis.lower()], self.stats["percentile_5"], line_color="orange", legend_label="5th Percentile", line_width=3)
+            perc_95 = plot.line(self.stats[x_axis.lower()], self.stats["percentile_95"], line_color="red", legend_label="95th Percentile", line_width=3) 
 
         plot.add_tools(HoverTool(tooltips="Median Strand Bias: @y {}: @x".format(x_axis), renderers=[median], mode="vline"))
         plot.add_tools(HoverTool(tooltips="Mean Strand Bias: @y {}: @x".format(x_axis), renderers=[mean], mode="vline"))
@@ -109,7 +120,6 @@ class IPlotter:
         plot.yaxis.axis_label_text_font_size = "15pt"
         plot.title.text_font_size = "15pt"
         return plot
-
 
     def create_kmers_vs_bias_plot(self):
         """
@@ -134,7 +144,6 @@ class IPlotter:
             ("Strand Bias (%)", "@{strand_bias_%}"),
             ("GC Content (%)", "@{GC_%}"),
         ]
-
 
         plot.add_tools(
             HoverTool(
@@ -162,7 +171,6 @@ class IPlotter:
         plot.title.text_font_size = "15pt"
         self.kmers_vs_sb = plot
         return plot
-
 
     def create_data_table(self):
         columns = [
@@ -257,7 +265,7 @@ def remove_glyphs(plot, plot_names=None):
     Remove glyphs from plot by given names
 
     :param plot:
-    :param plot_names:
+    :param plot_names:rem
     :return:
     """
     for name in plot_names:
@@ -265,9 +273,6 @@ def remove_glyphs(plot, plot_names=None):
             plot.renderers.remove(name)
         except ValueError:
             pass
-
-
-
 
 
 days_for_visual_inspection = NumericInput(
@@ -315,7 +320,7 @@ def analyze_bias(analysis, jf, nano, input_files):
             if df is not None:
                 analysis.plot_kmers_vs_bias(df, k)
                 if analysis.interactive and analysis.plotter is None:
-                    analysis.plotter = IPlotter(analysis.filename, k, df)
+                    analysis.plotter = IPlotter(analysis.filename, k, df,sb_file=analysis.sb_analysis_file, output=analysis.out_dir)
                     global PLOTTER
                     PLOTTER = analysis.plotter
                 if not detect_nano:
@@ -342,7 +347,6 @@ def interactive_plot(doc):
     clear_selected_button.on_click(PLOTTER.clear_selected)
     range_slider_sb = RangeSlider(title="Filter K-mers by Strand Bias", start=0, end=100, value=(0, 100), step=1)
     range_slider_frequency = RangeSlider(title="Filter K-mers by Frequency", start=0, end=PLOTTER.max_freq, value=(0, PLOTTER.max_freq), step=max(1000, PLOTTER.max_freq//100))
-    # days_to_label_input.on_change("value", plotter.update_data_to_label)
 
     def range_refresh(attr, old, new):
         PLOTTER.kmer_vs_sb_ds.data = PLOTTER.kmer_vs_sb_df[
@@ -352,13 +356,12 @@ def interactive_plot(doc):
             (PLOTTER.kmer_vs_sb_df["more_freq_count"] <= range_slider_frequency.value[1])
             ].sort_values(by="index")
 
-    range_slider_sb.on_change("value", range_refresh)#.on_change("value", plotter.refresh)
+    range_slider_sb.on_change("value", range_refresh)
     range_slider_frequency.on_change("value", range_refresh)
     download_button.on_click(PLOTTER.download_selected)
 
-    lineplot = PLOTTER.create_lineplot()
+    lineplot = PLOTTER.create_lineplot(bins=False)
     kmers_vs_sb = PLOTTER.create_kmers_vs_bias_plot()
-    print(PLOTTER.gc_data, PLOTTER.margin)
     gc_plot = PLOTTER.create_gc_plot()
 
     PLOTTER.kmer_vs_sb_ds.selected.on_change(
@@ -375,7 +378,6 @@ def run_server():
 
     server.start()
     from bokeh.util.browser import view
-    #
     server.io_loop.add_callback(view, "http://localhost:5006/")
     server.io_loop.start()
     server.io_loop.close()
