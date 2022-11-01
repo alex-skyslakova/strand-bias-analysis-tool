@@ -14,7 +14,7 @@ class Analysis:
     """
     Class representing primary analysis.
     """
-    def __init__(self, file=None, output_dir='', start_k=5, end_k=10, threads=1, margin=5):
+    def __init__(self, file=None, output_dir='', start_k=5, end_k=10, threads=1, margin=5, interactive=False):
         self.start_k = start_k
         self.end_k = end_k
         self.filepath = file
@@ -28,6 +28,8 @@ class Analysis:
         self.margin = margin
         self.threads = threads
         self.keep_computations = False
+        self.interactive = interactive
+        self.plotter = None
 
     def set_file(self, file):
         """
@@ -120,32 +122,34 @@ class Analysis:
         analysis.to_csv(analysis_name, index=False)
         return analysis_name
 
-    def plot_gc_from_dataframe(self, dfs):
+
+    def calculate_gc_plot_data(self, dfs):
         if all(x is None for x in dfs):
-            return
-        upper_gc = []
-        upper_biases = []
-        lower_gc = []
-        lower_biases = []
-        kmers = []
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 25))
+            return None
+        data = CalculatedGCData()
 
         for i, df in enumerate(dfs):
             if df is None or len(utils.get_n_percent(df, self.margin).index) == 0:
                 # skip DF if it's None or has too little values for retrieving N percent
                 continue
-            kmers.append(i + self.start_k)
+            data.kmers.append(i + self.start_k)
             df_head = utils.get_n_percent(df, self.margin)  # get N percent with the highest bias
-            upper_gc.append(None if len(df_head.index) == 0 else round(df_head["GC_%"].mean(), 2))
-            upper_biases.append(None if len(df_head.index) == 0 else round(df_head["strand_bias_%"].mean(), 2))
+            data.upper_gc.append(None if len(df_head.index) == 0 else round(df_head["GC_%"].mean(), 2))
+            data.upper_biases.append(None if len(df_head.index) == 0 else round(df_head["strand_bias_%"].mean(), 2))
 
             df_tail = utils.get_n_percent(df, self.margin, True)  # get N percent with the lowest bias
-            lower_gc.append(None if len(df_head.index) == 0 else round(df_tail["GC_%"].mean(), 2))
-            lower_biases.append(None if len(df_head.index) == 0 else round(df_tail["strand_bias_%"].mean(), 2))
+            data.lower_gc.append(None if len(df_head.index) == 0 else round(df_tail["GC_%"].mean(), 2))
+            data.lower_biases.append(None if len(df_head.index) == 0 else round(df_tail["strand_bias_%"].mean(), 2))
 
-        if not kmers:  # no dataframe is big enough to provide data
+        if not data.kmers:  # no dataframe is big enough to provide data
+            return None
+        return data
+
+    def plot_gc_from_dataframe(self, data):
+        if data is None:
             return
 
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 25))
         x_label = 'Mean GC content [%]'
         y_label = 'Mean Strand bias [%]'
 
@@ -156,22 +160,22 @@ class Analysis:
             ax.yaxis.set_tick_params(labelsize=25)
 
         ax1.set_title("GC Content vs Strand Bias in Top " + str(self.margin) + "% of SB Score", fontsize=30)
-        ax1.scatter(upper_gc, upper_biases, marker="^", color="red", s=300,
+        ax1.scatter(data.upper_gc, data.upper_biases, marker="^", color="red", s=300,
                     label="SB in bottom {}% for given k".format(self.margin))
 
         ax2.set_title("GC content vs Strand Bias in Bottom " + str(self.margin) + "% of SB Score", fontsize=30)
-        ax2.scatter(lower_gc, lower_biases, marker="v", color="green", s=300,
+        ax2.scatter(data.lower_gc, data.lower_biases, marker="v", color="green", s=300,
                     label="SB in bottom {}% for given k".format(self.margin))
 
         ax3.set_title("GC content vs Strand Bias in Bottom and Top " + str(self.margin) + "% of SB Score", fontsize=30)
-        ax3.scatter(lower_gc, lower_biases, marker="v", color="green", s=300,
+        ax3.scatter(data.lower_gc, data.lower_biases, marker="v", color="green", s=300,
                     label="SB in bottom {}% for given k".format(self.margin))
-        ax3.scatter(upper_gc, upper_biases, marker="^", color="red", s=300,
+        ax3.scatter(data.upper_gc, data.upper_biases, marker="^", color="red", s=300,
                     label="SB in bottom {}% for given k".format(self.margin))
         plt.legend()
-        for i, txt in enumerate(kmers):
-            ax1.annotate(" " + str(txt), (upper_gc[i], upper_biases[i]), fontsize=24)
-            ax2.annotate(" " + str(txt), (lower_gc[i], lower_biases[i]), fontsize=24)
+        for i, txt in enumerate(data.kmers):
+            ax1.annotate(" " + str(txt), (data.upper_gc[i], data.upper_biases[i]), fontsize=24)
+            ax2.annotate(" " + str(txt), (data.lower_gc[i], data.lower_biases[i]), fontsize=24)
         fig_path = os.path.join(self.fig_dir, "fig_gc_{0}%_{1}.png".format(str(self.margin), self.filename))
         fig_path = utils.unique_path(fig_path)
         plt.tight_layout(pad=1.5)
@@ -354,3 +358,12 @@ def plot_confidence_interval(x, values, z=1.96, color='#2187bb', horizontal_line
     plt.plot(x, mean, 'o', color='#f44336', linewidth=2, label="Mean Strand Bias" if legend else "")
 
     return mean, confidence_interval
+
+
+class CalculatedGCData:
+    def __init__(self):
+        self.upper_gc = []
+        self.upper_biases = []
+        self.lower_gc = []
+        self.lower_biases = []
+        self.kmers = []

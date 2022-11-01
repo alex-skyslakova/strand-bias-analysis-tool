@@ -4,14 +4,18 @@ import shutil
 import sys
 import argparse
 
-from sbat.jellyfish import Jellyfish
-from sbat.nanopore import Nanopore
 from sbat.analysis import Analysis
+from sbat.jellyfish_analysis import Jellyfish
+from sbat.nanopore import Nanopore
+from sbat.interactive_plots import IPlotter, analyze_bias, run_server
+
 from sbat.utils import check_if_nanopore, parse_iso_size
 import re as re
 
 
-__version__ = '0.0.7'
+__version__ = '0.0.9'
+RUN_SERVER = False
+
 
 class ParseSBAT(argparse.ArgumentParser):
     """
@@ -92,6 +96,10 @@ def arg_parser():
                         action="store_true",
                         default=False,
                         help='identify nanopore datasets among inputs and provide advanced analysis')
+    parser.add_argument('-p', '--interactive-plots',
+                        action="store_true",
+                        default=False,
+                        help='run bokeh server with interactive version of plots')
     args = parser.parse_args()
     analysis_args = args_checker(args)
     return analysis_args
@@ -161,6 +169,11 @@ def args_checker(args):
         a_args.start_k = args.mer[0]
         a_args.end_k = args.mer[1]
 
+    if args.interactive_plots:
+        a_args.interactive = True
+        global RUN_SERVER
+        RUN_SERVER = True
+
     if args.detect_nanopore:
         nano = Nanopore()
         nano.init_common(a_args, jf)
@@ -175,52 +188,18 @@ def args_checker(args):
     return a_args, jf, nano, args.input
 
 
-def main():
-    """
-    Function executing the core of the application.
-    """
-    analysis, jf, nano, input_files = arg_parser()
-    for file in input_files:  # run SBAT for each input file
-        analysis.set_file(file)
-        analysis.init_analysis()
-        print("input: " + file)
-        dfs = []
-        detect_nano = nano is not None and check_if_nanopore(file)
-        run_nano = detect_nano
-        for k in range(analysis.start_k, analysis.end_k + 1):
-            if jf is not None:
-                print("running computation and analysis for K=" + str(k))
-                jf_output = jf.run_jellyfish(file, k)
-
-                if run_nano:
-                    print('running nanopore analysis...')
-                    nano.nanopore_analysis(file)
-                    run_nano = False  # run analysis only once for each input file
-            else:
-                print("jellyfish disabled, running only analysis...")
-                jf_output = file
-            df = analysis.jellyfish_to_dataframe(jf_output, k)  # convert jellyfish results to DataFrame
-            dfs.append(df)
-            if df is not None:
-                analysis.plot_kmers_vs_bias(df, k)
-                if not detect_nano:
-                    # if not nanopore, create simplified version of this stats,
-                    # otherwise it is created as part of nanopore analysis
-                    analysis.track_most_common_kmer_change_freq([df], k)
-        analysis.plot_basic_stats_lineplot(analysis.filename, analysis.sb_analysis_file)
-        analysis.plot_conf_interval_graph(dfs, start_index=analysis.start_k)
-        analysis.plot_gc_from_dataframe(dfs)
-    if not analysis.keep_computations:
-        shutil.rmtree(analysis.dump_dir)
-        if jf is not None:
-            shutil.rmtree(jf.jf_dir)
-
-
 def version():
     """
     Prints current version of the tool.
     """
     print("StrandBiasAnalysisTool v" + __version__)
+
+
+def main():
+    analysis, jf, nano, input_files = arg_parser()
+    analyze_bias(analysis, jf, nano, input_files)
+    if RUN_SERVER:
+        run_server()
 
 
 if __name__ == '__main__':
